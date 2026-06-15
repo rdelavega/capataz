@@ -68,6 +68,6 @@ async def receive_message(
         await session.commit()
 
         if inserted_id:
-            background_tasks.add_task(process_event, inserted_id, session)
+            background_tasks.add_task(process_event, inserted_id)
 
     return {"status": "ok"}

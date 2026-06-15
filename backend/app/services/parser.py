@@ -7,9 +7,9 @@ import uuid
 from datetime import date, datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.db import AsyncSessionLocal
 from app.models.attendance import AttendanceDaily
 from app.models.event import Event
 from app.models.worker import Worker
@@ -41,7 +41,12 @@ def _extract_message(raw: dict) -> dict | None:
         return None
 
 
-async def process_event(event_id: uuid.UUID, session: AsyncSession) -> None:
+async def process_event(event_id: uuid.UUID) -> None:
+    async with AsyncSessionLocal() as session:
+        await _process(event_id, session)
+
+
+async def _process(event_id: uuid.UUID, session) -> None:
     event = await session.get(Event, event_id)
     if event is None:
         return
