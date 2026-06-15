@@ -20,6 +20,10 @@ class WorkerCreate(BaseModel):
     title: str | None = None
 
 
+class WorkerUpdate(BaseModel):
+    title: str | None = None
+
+
 @router.get("/branches")
 async def list_branches(session: AsyncSession = Depends(get_db)) -> dict:
     company_id = uuid.UUID(settings.company_id)
@@ -50,6 +54,27 @@ async def create_worker(
     await session.commit()
     await session.refresh(worker)
     return {"id": str(worker.id), "name": worker.name}
+
+
+@router.patch("/{worker_id}", status_code=200)
+async def update_worker(
+    worker_id: uuid.UUID,
+    body: WorkerUpdate,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    company_id = uuid.UUID(settings.company_id)
+    result = await session.execute(
+        select(Worker).where(
+            Worker.id == worker_id,
+            Worker.company_id == company_id,
+        )
+    )
+    worker = result.scalar_one_or_none()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    worker.title = body.title.strip() if body.title else None
+    await session.commit()
+    return {"ok": True}
 
 
 @router.delete("/{worker_id}", status_code=200)

@@ -26,14 +26,15 @@ const BAR_COLOR: Record<string, string> = {
 }
 
 const STAMP: Record<string, { cls: string; label: string }> = {
-  presente: { cls: 'stamp stamp-green', label: 'Presente' },
-  tarde:    { cls: 'stamp stamp-amber', label: 'Tarde'    },
-  ausente:  { cls: 'stamp stamp-red',   label: 'Ausente'  },
+  presente: { cls: 'stamp stamp-green', label: 'Presente'    },
+  tarde:    { cls: 'stamp stamp-amber', label: 'Tarde'       },
+  ausente:  { cls: 'stamp stamp-red',   label: 'Ausente'     },
+  null:     { cls: 'stamp stamp-gray',  label: 'Sin reporte' },
 }
 
 export function WorkerFicha({ worker }: Props) {
   const barColor = BAR_COLOR[worker.today_status ?? ''] ?? '#8C7169'
-  const stamp = STAMP[worker.today_status ?? '']
+  const stamp = STAMP[worker.today_status ?? 'null']
 
   return (
     <div className="card-press shadow-hard relative flex overflow-hidden border-2 border-[#2A2622] bg-[#FFF8F3]">
@@ -62,14 +63,16 @@ export function WorkerFicha({ worker }: Props) {
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t-2 border-[#E0C0B6] pt-3">
           <div>
             <dt className="label text-[#8C7169]">Check-in</dt>
-            <dd className="mono mt-0.5 text-[#2A2622]">{fmtTime(worker.checkin_at)}</dd>
+            <dd className={`mono mt-0.5 ${worker.checkin_at ? 'text-[#2A2622]' : 'text-[#BA7517]'}`}>
+              {worker.checkin_at ? fmtTime(worker.checkin_at) : 'Sin reporte'}
+            </dd>
           </div>
           <div>
             <dt className="label text-[#8C7169]">Último evento</dt>
-            <dd className="mono mt-0.5 text-[#2A2622]">
+            <dd className={`mono mt-0.5 ${worker.last_event ? 'text-[#2A2622]' : 'text-[#BA7517]'}`}>
               {worker.last_event
                 ? `${EVENT_LABEL[worker.last_event.type]} · ${fmtTime(worker.last_event.received_at)}`
-                : '—'}
+                : 'Sin contacto'}
             </dd>
           </div>
           <div>

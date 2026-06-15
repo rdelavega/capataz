@@ -116,5 +116,11 @@ export const createWorker = (data: WorkerCreate) =>
     body: JSON.stringify(data),
   })
 
+export const updateWorkerTitle = (id: string, title: string | null) =>
+  apiFetch<{ ok: boolean }>(`/workers/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title }),
+  })
+
 export const deactivateWorker = (id: string) =>
   apiFetch<{ ok: boolean }>(`/workers/${id}`, { method: 'DELETE' })

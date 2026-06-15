@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       '/webhook': 'http://localhost:8000',
       '/dashboard': 'http://localhost:8000',
+      '/workers': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
     },
   },

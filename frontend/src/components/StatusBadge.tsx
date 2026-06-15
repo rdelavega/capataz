@@ -6,7 +6,7 @@ const CFG: Record<string, { chip: string; label: string }> = {
   presente: { chip: 'chip chip-green',  label: 'Presente' },
   tarde:    { chip: 'chip chip-amber',  label: 'Tarde'    },
   ausente:  { chip: 'chip chip-red',    label: 'Ausente'  },
-  null:     { chip: 'chip chip-gray',   label: 'S/R'      },
+  null:     { chip: 'chip chip-gray',   label: 'Sin reporte' },
 }
 
 export function StatusBadge({ status }: Props) {
