@@ -51,7 +51,9 @@ export function WorkerFicha({ worker }: Props) {
           </div>
           <div className="min-w-0">
             <h3 className="hl-sm leading-tight text-[#2A2622]">{worker.name}</h3>
-            <p className="label mt-0.5 text-[#D85A30]">{worker.branch_name}</p>
+            <p className="label mt-0.5 text-[#D85A30]">
+              {worker.title ?? worker.branch_name}
+            </p>
             <p className="mono text-[#8C7169]">{worker.phone_number}</p>
           </div>
         </div>

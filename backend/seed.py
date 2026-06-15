@@ -44,24 +44,28 @@ async def seed() -> None:
                     branch_id=norte.id,
                     name="Juan López",
                     phone_number="+5215512345001",
+                    title="Maestro Albañil",
                 ),
                 Worker(
                     company_id=COMPANY_ID,
                     branch_id=norte.id,
                     name="María García",
                     phone_number="+5215512345002",
+                    title="Plomera",
                 ),
                 Worker(
                     company_id=COMPANY_ID,
                     branch_id=sur.id,
                     name="Carlos Pérez",
                     phone_number="+5215512345003",
+                    title="Electricista",
                 ),
                 Worker(
                     company_id=COMPANY_ID,
                     branch_id=sur.id,
                     name="Ana Martínez",
                     phone_number="+5215512345004",
+                    title="Supervisora de obra",
                 ),
             ]
             session.add_all(workers)

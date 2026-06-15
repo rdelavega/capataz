@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import dashboard, webhook
+from app.routers import dashboard, webhook, workers
 
 app = FastAPI(title="Capataz API", version="0.1.0")
 
@@ -14,6 +14,7 @@ app.add_middleware(
 
 app.include_router(webhook.router)
 app.include_router(dashboard.router)
+app.include_router(workers.router)
 
 
 @app.get("/health")

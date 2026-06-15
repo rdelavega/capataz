@@ -1,7 +1,10 @@
 const API_URL = import.meta.env.VITE_API_URL ?? ''
 
-async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`)
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...init,
+  })
   if (!res.ok) throw new Error(`Error ${res.status}`)
   return res.json()
 }
@@ -17,6 +20,7 @@ export interface WorkerData {
   id: string
   name: string
   phone_number: string
+  title: string | null
   branch_name: string
   today_status: 'presente' | 'ausente' | 'tarde' | null
   checkin_at: string | null
@@ -70,6 +74,7 @@ export interface WorkerDetail {
   id: string
   name: string
   phone_number: string
+  title: string | null
   branch_id: string | null
   branch_name: string | null
   active: boolean
@@ -83,3 +88,33 @@ export interface WorkersResponse {
 
 export const fetchWorkers = () =>
   apiFetch<WorkersResponse>('/dashboard/workers')
+
+// ─── Worker CRUD ─────────────────────────────────────────────────────────────
+
+export interface BranchOption {
+  id: string
+  name: string
+}
+
+export interface BranchesResponse {
+  branches: BranchOption[]
+}
+
+export interface WorkerCreate {
+  name: string
+  phone_number: string
+  branch_id: string
+  title?: string
+}
+
+export const fetchBranches = () =>
+  apiFetch<BranchesResponse>('/workers/branches')
+
+export const createWorker = (data: WorkerCreate) =>
+  apiFetch<{ id: string; name: string }>('/workers', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+
+export const deactivateWorker = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/workers/${id}`, { method: 'DELETE' })
