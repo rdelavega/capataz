@@ -1,50 +1,92 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-headline: "Oswald", condensed, sans-serif;
+  --font-body: "Archivo", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
 
-  /* Superficie */
-  --color-bg: oklch(1.000 0.000 0);
-  --color-surface: oklch(0.978 0.004 200);
-  --color-border: oklch(0.912 0.008 200);
+  /* Kraft paper palette */
+  --color-kraft:        #F2EDE4;
+  --color-kraft-dim:    #E5DFD3;
+  --color-surface:      #FFF8F3;
+  --color-surface-low:  #FDF2E4;
+  --color-surface-high: #ECE1D3;
 
-  /* Tipografía */
-  --color-ink: oklch(0.148 0.015 200);
-  --color-muted: oklch(0.500 0.012 200);
+  /* Ink */
+  --color-ink:          #2A2622;
+  --color-ink-muted:    #58423B;
+  --color-ink-faint:    #8C7169;
 
-  /* Marca */
-  --color-primary: oklch(0.295 0.085 198);
-  --color-primary-fg: oklch(1.000 0.000 0);
+  /* Primary — Industrial orange */
+  --color-orange:       #D85A30;
+  --color-orange-dark:  #A5360D;
 
-  /* Semáforo — dot */
-  --color-verde: oklch(0.510 0.145 148);
-  --color-amarillo: oklch(0.700 0.140 82);
-  --color-rojo: oklch(0.510 0.195 22);
+  /* Status */
+  --color-green:        #639922;
+  --color-amber:        #BA7517;
+  --color-red:          #A32D2D;
+
+  /* Outline */
+  --color-outline:      #E0C0B6;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 
+html { font-size: 16px; }
+
 body {
   margin: 0;
-  font-family: var(--font-sans);
-  font-feature-settings: "tnum";
-  background-color: var(--color-bg);
+  font-family: var(--font-body);
+  background-color: var(--color-kraft);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Semáforo — pills de estado en badges */
-.badge-verde   { background: oklch(0.952 0.050 148); color: oklch(0.320 0.110 148); }
-.badge-amarillo { background: oklch(0.958 0.050 82);  color: oklch(0.370 0.095 82);  }
-.badge-rojo    { background: oklch(0.952 0.050 22);  color: oklch(0.350 0.135 22);  }
-.badge-gray    { background: oklch(0.940 0.004 200); color: oklch(0.480 0.010 200); }
+/* ── Typography scale ─────────────────────────────── */
+.hl-lg  { font-family: var(--font-headline); font-size: 2.5rem;  font-weight: 700; line-height: 1.1; letter-spacing: 0.02em; text-transform: uppercase; }
+.hl-md  { font-family: var(--font-headline); font-size: 1.5rem;  font-weight: 600; line-height: 1.2; text-transform: uppercase; }
+.hl-sm  { font-family: var(--font-headline); font-size: 1.125rem; font-weight: 500; line-height: 1.2; text-transform: uppercase; }
+.mono   { font-family: var(--font-mono);     font-size: 0.8125rem; font-weight: 500; line-height: 1.4; }
+.label  { font-family: var(--font-mono);     font-size: 0.6875rem; font-weight: 700; line-height: 1.2; text-transform: uppercase; letter-spacing: 0.08em; }
 
-/* Attendance status */
-.att-presente  { background: oklch(0.952 0.050 148); color: oklch(0.320 0.110 148); }
-.att-tarde     { background: oklch(0.958 0.050 82);  color: oklch(0.370 0.095 82);  }
-.att-ausente   { background: oklch(0.952 0.050 22);  color: oklch(0.350 0.135 22);  }
-.att-null      { background: oklch(0.940 0.004 200); color: oklch(0.480 0.010 200); }
+/* ── Shadows ──────────────────────────────────────── */
+.shadow-hard   { box-shadow: 4px 4px 0 0 #2A2622; }
+.shadow-hard-sm { box-shadow: 2px 2px 0 0 #2A2622; }
+
+/* ── Card mechanic hover ──────────────────────────── */
+.card-press {
+  transition: transform 80ms ease, box-shadow 80ms ease;
+}
+.card-press:hover  { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 0 #2A2622; }
+.card-press:active { transform: translate(2px, 2px);   box-shadow: none; }
+
+/* ── Status chips (sharp, no radius) ─────────────── */
+.chip { display: inline-flex; align-items: center; padding: 1px 8px; border: 2px solid; font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.chip-green  { background: #639922; border-color: #2A2622; color: #fff; }
+.chip-amber  { background: #BA7517; border-color: #2A2622; color: #fff; }
+.chip-red    { background: #A32D2D; border-color: #2A2622; color: #fff; }
+.chip-gray   { background: #E5DFD3; border-color: #8C7169; color: #58423B; }
+
+/* ── Rubber stamp ─────────────────────────────────── */
+.stamp {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-width: 3px;
+  border-style: solid;
+  font-family: var(--font-headline);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.82;
+}
+.stamp-green  { border-color: #639922; color: #639922; }
+.stamp-amber  { border-color: #BA7517; color: #BA7517; }
+.stamp-red    { border-color: #A32D2D; color: #A32D2D; }
+.stamp-gray   { border-color: #8C7169; color: #8C7169; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  .card-press { transition: none; }
+  .card-press:hover, .card-press:active { transform: none; box-shadow: 4px 4px 0 0 #2A2622; }
 }
