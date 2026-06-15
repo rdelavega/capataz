@@ -2,18 +2,23 @@ interface Props {
   status: 'presente' | 'ausente' | 'tarde' | null
 }
 
-const config = {
-  presente: { label: 'Presente', classes: 'bg-green-100 text-green-800' },
-  tarde: { label: 'Tarde', classes: 'bg-yellow-100 text-yellow-800' },
-  ausente: { label: 'Ausente', classes: 'bg-red-100 text-red-800' },
-  null: { label: 'Sin registro', classes: 'bg-gray-100 text-gray-500' },
+const LABEL: Record<string, string> = {
+  presente: 'Presente',
+  tarde: 'Tarde',
+  ausente: 'Ausente',
+}
+
+const CLASS: Record<string, string> = {
+  presente: 'att-presente',
+  tarde: 'att-tarde',
+  ausente: 'att-ausente',
 }
 
 export function StatusBadge({ status }: Props) {
-  const key = status ?? 'null'
-  const { label, classes } = config[key]
+  const cls = status ? CLASS[status] : 'att-null'
+  const label = status ? LABEL[status] : 'Sin registro'
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${classes}`}>
+    <span className={`${cls} inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium`}>
       {label}
     </span>
   )

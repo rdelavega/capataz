@@ -1,8 +1,50 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+
+  /* Superficie */
+  --color-bg: oklch(1.000 0.000 0);
+  --color-surface: oklch(0.978 0.004 200);
+  --color-border: oklch(0.912 0.008 200);
+
+  /* Tipografía */
+  --color-ink: oklch(0.148 0.015 200);
+  --color-muted: oklch(0.500 0.012 200);
+
+  /* Marca */
+  --color-primary: oklch(0.295 0.085 198);
+  --color-primary-fg: oklch(1.000 0.000 0);
+
+  /* Semáforo — dot */
+  --color-verde: oklch(0.510 0.145 148);
+  --color-amarillo: oklch(0.700 0.140 82);
+  --color-rojo: oklch(0.510 0.195 22);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
 body {
   margin: 0;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  background-color: #f9fafb;
-  color: #111827;
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum";
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Semáforo — pills de estado en badges */
+.badge-verde   { background: oklch(0.952 0.050 148); color: oklch(0.320 0.110 148); }
+.badge-amarillo { background: oklch(0.958 0.050 82);  color: oklch(0.370 0.095 82);  }
+.badge-rojo    { background: oklch(0.952 0.050 22);  color: oklch(0.350 0.135 22);  }
+.badge-gray    { background: oklch(0.940 0.004 200); color: oklch(0.480 0.010 200); }
+
+/* Attendance status */
+.att-presente  { background: oklch(0.952 0.050 148); color: oklch(0.320 0.110 148); }
+.att-tarde     { background: oklch(0.958 0.050 82);  color: oklch(0.370 0.095 82);  }
+.att-ausente   { background: oklch(0.952 0.050 22);  color: oklch(0.350 0.135 22);  }
+.att-null      { background: oklch(0.940 0.004 200); color: oklch(0.480 0.010 200); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }

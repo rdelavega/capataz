@@ -5,41 +5,59 @@ interface Props {
   branch: BranchData
 }
 
-const SEMAFORO = {
-  verde: { dot: 'bg-green-500', label: 'Al día', ring: 'ring-green-200' },
-  amarillo: { dot: 'bg-yellow-400', label: 'Parcial', ring: 'ring-yellow-200' },
-  rojo: { dot: 'bg-red-500', label: 'Atención', ring: 'ring-red-200' },
+const SEM = {
+  verde:    { dot: 'bg-[var(--color-verde)]',    badge: 'badge-verde',    label: 'Al día'   },
+  amarillo: { dot: 'bg-[var(--color-amarillo)]', badge: 'badge-amarillo', label: 'Parcial'  },
+  rojo:     { dot: 'bg-[var(--color-rojo)]',     badge: 'badge-rojo',     label: 'Atención' },
 }
 
+const COLS = ['Nombre', 'Teléfono', 'Asistencia', 'Check-in', 'Último evento', 'Tareas']
+
 export function BranchCard({ branch }: Props) {
-  const sem = SEMAFORO[branch.semaforo]
+  const sem = SEM[branch.semaforo]
+  const activeWorkers = branch.workers.length
+
   return (
-    <div className={`rounded-xl bg-white shadow-sm ring-1 ${sem.ring} overflow-hidden`}>
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
-        <span className={`h-3 w-3 rounded-full ${sem.dot}`} />
-        <h2 className="text-base font-semibold text-gray-800">{branch.name}</h2>
-        <span className="ml-auto text-xs text-gray-400">{sem.label}</span>
-        <span className="text-xs text-gray-400">{branch.workers.length} trabajadores</span>
+    <div className="rounded-xl border border-[var(--color-border)] bg-white overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 py-4">
+        <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${sem.dot}`} />
+        <h2 className="text-sm font-semibold text-[var(--color-ink)] text-wrap-balance flex-1">
+          {branch.name}
+        </h2>
+        <span className={`${sem.badge} inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium`}>
+          {sem.label}
+        </span>
+        <span className="text-xs text-[var(--color-muted)] tabular-nums">
+          {activeWorkers} {activeWorkers === 1 ? 'trabajador' : 'trabajadores'}
+        </span>
       </div>
 
-      {branch.workers.length === 0 ? (
-        <p className="px-4 py-6 text-sm text-gray-400 text-center">Sin trabajadores asignados</p>
+      {/* Table */}
+      {activeWorkers === 0 ? (
+        <p className="px-5 py-8 text-center text-sm text-[var(--color-muted)]">
+          Sin trabajadores asignados
+        </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gray-50">
-              <tr>
-                {['Nombre', 'Teléfono', 'Estado', 'Check-in', 'Último evento', 'Tareas'].map((h) => (
+          <table className="w-full min-w-[640px]">
+            <thead>
+              <tr className="border-t border-[var(--color-border)] bg-[var(--color-surface)]">
+                {COLS.map((col, i) => (
                   <th
-                    key={h}
-                    className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wide first:pl-4"
+                    key={col}
+                    className={`py-2 text-xs font-medium text-[var(--color-muted)] ${
+                      i === 0 ? 'pl-5 pr-3 text-left' :
+                      i === COLS.length - 1 ? 'pl-3 pr-5 text-right' :
+                      'px-3 text-left'
+                    }`}
                   >
-                    {h}
+                    {col}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50 bg-white">
+            <tbody>
               {branch.workers.map((w) => (
                 <WorkerRow key={w.id} worker={w} />
               ))}

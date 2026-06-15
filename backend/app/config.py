@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -5,6 +6,16 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     database_url: str
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_db_url(cls, v: str) -> str:
+        # Supabase (y otras fuentes) devuelven postgres:// o postgresql://
+        # SQLAlchemy async necesita el driver explícito: postgresql+asyncpg://
+        for prefix in ("postgresql://", "postgres://"):
+            if v.startswith(prefix):
+                return "postgresql+asyncpg://" + v[len(prefix):]
+        return v
 
     whatsapp_verify_token: str
     whatsapp_token: str
