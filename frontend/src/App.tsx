@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { type ReactElement, useState } from 'react'
 import { type Page, Sidebar } from './components/Sidebar'
 import { Dashboard } from './pages/Dashboard'
 import { RegistrosDiarios } from './pages/RegistrosDiarios'
 import { Equipo } from './pages/Equipo'
 
-const PAGES: Record<Page, JSX.Element> = {
+const PAGES: Record<Page, ReactElement> = {
   dashboard: <Dashboard />,
   registros: <RegistrosDiarios />,
   equipo:    <Equipo />,
