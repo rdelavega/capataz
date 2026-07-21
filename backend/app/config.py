@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     openai_api_key: str
 
     company_id: str
+    allowed_origins: str = "http://localhost:5173,http://localhost:3000"
 
 
 settings = Settings()  # type: ignore[call-arg]
