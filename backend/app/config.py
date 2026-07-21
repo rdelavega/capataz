@@ -21,13 +21,13 @@ class Settings(BaseSettings):
     whatsapp_token: str
     whatsapp_phone_number_id: str
 
-    r2_account_id: str
-    r2_access_key_id: str
-    r2_secret_access_key: str
-    r2_bucket_name: str
-    r2_public_url: str
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket_name: str = "capataz-media"
+    r2_public_url: str = ""
 
-    openai_api_key: str
+    openai_api_key: str = ""
 
     company_id: str
     allowed_origins: str = "http://localhost:5173,http://localhost:3000"
