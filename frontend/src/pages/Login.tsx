@@ -7,12 +7,15 @@ export function Login({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    const form = e.currentTarget
+    const emailVal    = (form.elements.namedItem('email')    as HTMLInputElement).value
+    const passwordVal = (form.elements.namedItem('password') as HTMLInputElement).value
     setLoading(true)
     setError(null)
     try {
-      const user = await login(email, password)
+      const user = await login(emailVal, passwordVal)
       onLogin(user)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al iniciar sesión')
@@ -42,6 +45,7 @@ export function Login({ onLogin }: { onLogin: (user: AuthUser) => void }) {
             <label className="label text-[#58423B]">Correo</label>
             <input
               type="email"
+              name="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="dueno@empresa.com"
@@ -55,6 +59,7 @@ export function Login({ onLogin }: { onLogin: (user: AuthUser) => void }) {
             <label className="label text-[#58423B]">Contraseña</label>
             <input
               type="password"
+              name="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
