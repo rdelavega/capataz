@@ -129,7 +129,7 @@ async def _process(event_id: uuid.UUID, session) -> None:
     event.latitude = latitude
     event.longitude = longitude
 
-    # Check-in → upsert en attendance_daily
+    # Check-in → upsert en attendance_daily + respuesta al trabajador
     if event_type == "checkin":
         today = date.today()
         existing = await session.execute(
@@ -149,9 +149,16 @@ async def _process(event_id: uuid.UUID, session) -> None:
                 event_id=event.id,
             )
             session.add(attendance)
+            reply = f"✅ ¡Presente! Buenos días, {worker.name.split()[0]}. Tu registro quedó guardado."
         else:
             attendance.status = "presente"
             attendance.checkin_at = attendance.checkin_at or datetime.now(tz=timezone.utc)
+            reply = f"👍 Ya tenías registro de hoy, {worker.name.split()[0]}. ¡Que te vaya bien!"
+
+        try:
+            await whatsapp.send_text_message(phone_number, reply)
+        except Exception as e:
+            logger.error("event %s: failed to send reply: %s", event_id, e)
 
     await session.commit()
     logger.info("event %s: processed as %s for worker %s", event_id, event_type, worker.name)
