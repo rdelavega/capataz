@@ -50,8 +50,13 @@ function StatusSelect({ jobId, current, onChanged }: {
   }
 
   return (
-    <div className="relative inline-flex items-center gap-1">
-      <span className={cfg.chip}>{cfg.label}</span>
+    <div className="relative inline-flex items-center gap-1 group">
+      <span className={`${cfg.chip} pr-5 transition-opacity ${saving ? 'opacity-50' : ''}`}>
+        {saving ? '…' : cfg.label}
+      </span>
+      <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] opacity-50 group-hover:opacity-100 transition-opacity">
+        ▾
+      </span>
       <select
         value={current}
         onChange={handleChange}
