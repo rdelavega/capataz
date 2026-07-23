@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import type { BranchOption, JobData, WorkerDetail } from '../api/client'
+import type { JobData, WorkerDetail } from '../api/client'
 import {
-  createJob, deleteJob, fetchBranches,
+  createJob, deleteJob,
   fetchJobs, fetchWorkers, updateJob,
 } from '../api/client'
 
@@ -193,28 +193,28 @@ export function Tareas() {
   const [showModal, setShowModal] = useState(false)
   const [err, setErr]           = useState<string | null>(null)
 
-  async function load(status = filter) {
-    setLoading(true)
-    setErr(null)
-    try {
-      const [jobsRes, workersRes] = await Promise.all([
-        fetchJobs(status || undefined),
-        fetchWorkers(),
-      ])
-      setJobs(jobsRes.jobs)
-      setWorkers(workersRes.workers)
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Error al cargar')
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      setErr(null)
+      try {
+        const [jobsRes, workersRes] = await Promise.all([
+          fetchJobs(filter || undefined),
+          fetchWorkers(),
+        ])
+        setJobs(jobsRes.jobs)
+        setWorkers(workersRes.workers)
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : 'Error al cargar')
+      } finally {
+        setLoading(false)
+      }
     }
-  }
-
-  useEffect(() => { load() }, [])
+    load()
+  }, [filter])
 
   function handleFilter(val: string) {
     setFilter(val)
-    load(val)
   }
 
   function handleStatusChange(jobId: string, status: string) {
