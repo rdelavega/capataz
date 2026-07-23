@@ -1,30 +1,23 @@
-import { ClipboardList, LayoutDashboard, ListTodo, Users } from "lucide-react";
+import { ClipboardList, LayoutDashboard, ListTodo, LogOut, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import type { AuthUser } from "../api/client";
 
 export type Page = "dashboard" | "registros" | "equipo" | "tareas";
 
 const NAV: { icon: ReactNode; label: string; page: Page }[] = [
   { icon: <LayoutDashboard size={16} />, label: "Panel de Control", page: "dashboard" },
   { icon: <ClipboardList size={16} />,  label: "Registros Diarios", page: "registros" },
-  { icon: <Users size={16} />,          label: "Equipo",            page: "equipo" },
-  { icon: <ListTodo size={16} />,       label: "Tareas",            page: "tareas" },
+  { icon: <Users size={16} />,          label: "Equipo",            page: "equipo"    },
+  { icon: <ListTodo size={16} />,       label: "Tareas",            page: "tareas"    },
 ];
 
 function useClock() {
   const [time, setTime] = useState(() =>
-    new Date().toLocaleTimeString("es-MX", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
+    new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
   );
   useEffect(() => {
     const id = setInterval(() => {
-      setTime(
-        new Date().toLocaleTimeString("es-MX", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      );
+      setTime(new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }));
     }, 30_000);
     return () => clearInterval(id);
   }, []);
@@ -34,9 +27,11 @@ function useClock() {
 interface Props {
   current: Page;
   onNavigate: (page: Page) => void;
+  user: AuthUser;
+  onLogout: () => void;
 }
 
-export function Sidebar({ current, onNavigate }: Props) {
+export function Sidebar({ current, onNavigate, user, onLogout }: Props) {
   const time = useClock();
   const today = new Date().toLocaleDateString("es-MX", {
     weekday: "short",
@@ -76,9 +71,7 @@ export function Sidebar({ current, onNavigate }: Props) {
                   : "border-transparent text-[#2A2622] hover:bg-[#ECE1D3] hover:border-[#2A2622]",
               ].join(" ")}
             >
-              <span className="shrink-0" aria-hidden="true">
-                {icon}
-              </span>
+              <span className="shrink-0" aria-hidden="true">{icon}</span>
               <span className="label">{label}</span>
             </button>
           );
@@ -87,38 +80,36 @@ export function Sidebar({ current, onNavigate }: Props) {
 
       {/* System status */}
       <div className="border-t-2 border-[#2A2622] px-4 py-3 space-y-2.5">
-        <p
-          className="label text-[#8C7169]"
-          style={{ fontSize: "10px", letterSpacing: "0.1em" }}
-        >
+        <p className="label text-[#8C7169]" style={{ fontSize: "10px", letterSpacing: "0.1em" }}>
           SISTEMA
         </p>
 
-        {/* WhatsApp bot */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span
-              className="h-2 w-2 shrink-0 rounded-full bg-[#BA7517]"
-              aria-hidden="true"
-            />
+            <span className="h-2 w-2 shrink-0 rounded-full bg-[#639922]" aria-hidden="true" />
             <span className="mono text-xs text-[#58423B]">Bot WhatsApp</span>
           </div>
-          <span className="mono text-xs text-[#BA7517]">Pendiente</span>
+          <span className="mono text-xs text-[#639922]">Activo</span>
         </div>
 
-        {/* Date + time */}
         <div className="flex items-center justify-between border-t border-[#E0C0B6] pt-2">
-          <span className="mono text-xs capitalize text-[#8C7169]">
-            {today}
-          </span>
+          <span className="mono text-xs capitalize text-[#8C7169]">{today}</span>
           <span className="mono text-xs text-[#8C7169]">{time}</span>
         </div>
       </div>
 
-      {/* CTA */}
-      <div className="border-t-2 border-[#2A2622] p-3">
-        <button className="label w-full border-2 border-[#2A2622] bg-[#D85A30] py-3 text-white shadow-hard-sm transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none hover:bg-[#A5360D]">
-          + Nueva tarea
+      {/* Usuario + Salir */}
+      <div className="border-t-2 border-[#2A2622] px-4 py-3 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="label text-[#2A2622] truncate">{user.name}</p>
+          <p className="mono text-[10px] text-[#8C7169] truncate">{user.email}</p>
+        </div>
+        <button
+          onClick={onLogout}
+          title="Cerrar sesión"
+          className="shrink-0 text-[#8C7169] hover:text-[#A32D2D] transition-colors"
+        >
+          <LogOut size={16} />
         </button>
       </div>
     </aside>

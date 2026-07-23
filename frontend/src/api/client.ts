@@ -1,12 +1,59 @@
 const API_URL = import.meta.env.VITE_API_URL ?? ''
 
+const TOKEN_KEY = 'capataz_token'
+const USER_KEY  = 'capataz_user'
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
-  })
+  const token = localStorage.getItem(TOKEN_KEY)
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`${API_URL}${path}`, { headers, ...init })
+
+  if (res.status === 401) {
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(USER_KEY)
+    window.location.reload()
+    throw new Error('Sesión expirada')
+  }
   if (!res.ok) throw new Error(`Error ${res.status}`)
   return res.json()
+}
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+export interface AuthUser {
+  name: string
+  email: string
+}
+
+export function getStoredUser(): AuthUser | null {
+  try {
+    const raw = localStorage.getItem(USER_KEY)
+    return raw ? (JSON.parse(raw) as AuthUser) : null
+  } catch {
+    return null
+  }
+}
+
+export async function login(email: string, password: string): Promise<AuthUser> {
+  const res = await fetch(`${API_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+  if (res.status === 401) throw new Error('Email o contraseña incorrectos')
+  if (!res.ok) throw new Error(`Error ${res.status}`)
+  const data = await res.json()
+  localStorage.setItem(TOKEN_KEY, data.access_token)
+  const user: AuthUser = { name: data.name, email: data.email }
+  localStorage.setItem(USER_KEY, JSON.stringify(user))
+  return user
+}
+
+export function logout(): void {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(USER_KEY)
 }
 
 // ─── Overview ────────────────────────────────────────────────────────────────

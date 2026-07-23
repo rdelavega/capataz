@@ -1,35 +1,47 @@
-import { RefreshCw } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
-import type { OverviewResponse } from '../api/client'
-import { fetchOverview } from '../api/client'
-import { BranchSection } from '../components/BranchSection'
+import { RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { OverviewResponse } from "../api/client";
+import { fetchOverview } from "../api/client";
+import { BranchSection } from "../components/BranchSection";
 
-const POLL_MS = 30_000
+const POLL_MS = 30_000;
 
 function fmtDate(iso: string) {
-  return new Date(iso + 'T12:00:00').toLocaleDateString('es-MX', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  })
+  return new Date(iso + "T12:00:00").toLocaleDateString("es-MX", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function computeStats(data: OverviewResponse) {
-  let total = 0, presentes = 0, branchesOk = 0, overdue = 0
+  let total = 0,
+    presentes = 0,
+    branchesOk = 0,
+    overdue = 0;
   for (const b of data.branches) {
-    if (b.semaforo === 'verde') branchesOk++
+    if (b.semaforo === "verde") branchesOk++;
     for (const w of b.workers) {
-      total++
-      if (w.today_status === 'presente') presentes++
-      overdue += w.overdue_jobs
+      total++;
+      if (w.today_status === "presente") presentes++;
+      overdue += w.overdue_jobs;
     }
   }
-  return { total, presentes, branchesOk, totalBranches: data.branches.length, overdue }
+  return {
+    total,
+    presentes,
+    branchesOk,
+    totalBranches: data.branches.length,
+    overdue,
+  };
 }
 
 interface StatCardProps {
-  label: string
-  value: string
-  sub: string
-  alert?: boolean
+  label: string;
+  value: string;
+  sub: string;
+  alert?: boolean;
 }
 
 function StatCard({ label, value, sub, alert }: StatCardProps) {
@@ -38,41 +50,48 @@ function StatCard({ label, value, sub, alert }: StatCardProps) {
       <span className="label text-[#58423B]">{label}</span>
       <span
         className="hl-lg leading-none"
-        style={{ color: alert ? '#A32D2D' : '#2A2622' }}
+        style={{ color: alert ? "#A32D2D" : "#2A2622" }}
       >
         {value}
       </span>
       <span className="mono text-[#8C7169]">{sub}</span>
     </div>
-  )
+  );
 }
 
 export function Dashboard() {
-  const [data, setData]       = useState<OverviewResponse | null>(null)
-  const [error, setError]     = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const mounted = useRef(true)
+  const [data, setData] = useState<OverviewResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const mounted = useRef(true);
 
   async function load() {
-    setLoading(true)
+    setLoading(true);
     try {
-      const r = await fetchOverview()
-      if (mounted.current) { setData(r); setError(null) }
+      const r = await fetchOverview();
+      if (mounted.current) {
+        setData(r);
+        setError(null);
+      }
     } catch (e) {
-      if (mounted.current) setError(e instanceof Error ? e.message : 'Error al cargar')
+      if (mounted.current)
+        setError(e instanceof Error ? e.message : "Error al cargar");
     } finally {
-      if (mounted.current) setLoading(false)
+      if (mounted.current) setLoading(false);
     }
   }
 
   useEffect(() => {
-    mounted.current = true
-    load()
-    const id = setInterval(load, POLL_MS)
-    return () => { mounted.current = false; clearInterval(id) }
-  }, [])
+    mounted.current = true;
+    load();
+    const id = setInterval(load, POLL_MS);
+    return () => {
+      mounted.current = false;
+      clearInterval(id);
+    };
+  }, []);
 
-  const stats = data ? computeStats(data) : null
+  const stats = data ? computeStats(data) : null;
 
   return (
     <div className="min-h-screen bg-[#F2EDE4]">
@@ -81,16 +100,18 @@ export function Dashboard() {
         <div>
           <h1 className="hl-md text-[#2A2622]">Panel de control</h1>
           {data && (
-            <p className="label mt-0.5 capitalize text-[#8C7169]">{fmtDate(data.date)}</p>
+            <p className="label mt-0.5 capitalize text-[#8C7169]">
+              {fmtDate(data.date)}
+            </p>
           )}
         </div>
         <button
           onClick={load}
           disabled={loading}
-          className="label border-2 border-[#2A2622] bg-[#D85A30] px-4 py-2 text-white shadow-hard-sm transition-all hover:bg-[#A5360D] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-40"
+          className="flex justify-around label text-center border-2 border-[#2A2622] bg-[#D85A30] px-4 py-2.5 text-white shadow-hard-sm transition-all hover:bg-[#A5360D] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-40"
         >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          {loading ? 'Cargando…' : 'Actualizar'}
+          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+          <div className="px-2">{loading ? "Cargando…" : "Actualizar"}</div>
         </button>
       </header>
 
@@ -109,17 +130,25 @@ export function Dashboard() {
             <StatCard
               label="Presentes hoy"
               value={`${stats.presentes}/${stats.total}`}
-              sub={stats.presentes === stats.total ? 'Equipo completo' : `${stats.total - stats.presentes} sin confirmar`}
+              sub={
+                stats.presentes === stats.total
+                  ? "Equipo completo"
+                  : `${stats.total - stats.presentes} sin confirmar`
+              }
             />
             <StatCard
               label="Sucursales al día"
               value={`${stats.branchesOk}/${stats.totalBranches}`}
-              sub={stats.branchesOk === stats.totalBranches ? 'Operación normal' : 'Requieren atención'}
+              sub={
+                stats.branchesOk === stats.totalBranches
+                  ? "Operación normal"
+                  : "Requieren atención"
+              }
             />
             <StatCard
               label="Tareas atrasadas"
               value={String(stats.overdue)}
-              sub={stats.overdue === 0 ? 'Sin retrasos' : 'Requieren acción'}
+              sub={stats.overdue === 0 ? "Sin retrasos" : "Requieren acción"}
               alert={stats.overdue > 0}
             />
           </div>
@@ -129,8 +158,11 @@ export function Dashboard() {
         {!data && !error && (
           <div className="space-y-8">
             <div className="grid grid-cols-3 gap-4">
-              {[0, 1, 2].map(i => (
-                <div key={i} className="h-28 animate-pulse border-2 border-[#E0C0B6] bg-[#FFF8F3]" />
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="h-28 animate-pulse border-2 border-[#E0C0B6] bg-[#FFF8F3]"
+                />
               ))}
             </div>
             <div className="h-64 animate-pulse border-2 border-[#E0C0B6] bg-[#FFF8F3]" />
@@ -144,10 +176,9 @@ export function Dashboard() {
           </p>
         )}
 
-        {data && data.branches.map(b => (
-          <BranchSection key={b.id} branch={b} />
-        ))}
+        {data &&
+          data.branches.map((b) => <BranchSection key={b.id} branch={b} />)}
       </main>
     </div>
-  )
+  );
 }

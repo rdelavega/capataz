@@ -32,5 +32,8 @@ class Settings(BaseSettings):
     company_id: str
     allowed_origins: str = "http://localhost:5173,http://localhost:3000"
 
+    secret_key: str = "dev-secret-change-in-prod"
+    access_token_expire_minutes: int = 1440
+
 
 settings = Settings()  # type: ignore[call-arg]
