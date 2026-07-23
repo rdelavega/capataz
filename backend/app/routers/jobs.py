@@ -12,6 +12,7 @@ from app.db import get_db
 from app.models.branch import Branch
 from app.models.job import Job
 from app.models.worker import Worker
+from app.services import whatsapp
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -150,4 +151,36 @@ async def delete_job(
         raise HTTPException(status_code=404, detail="Job not found")
     await session.delete(job)
     await session.commit()
+    return {"ok": True}
+
+
+@router.post("/{job_id}/remind", status_code=200)
+async def remind_job(
+    job_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    company_id = uuid.UUID(settings.company_id)
+    result = await session.execute(
+        select(Job).where(Job.id == job_id, Job.company_id == company_id)
+    )
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.worker_id:
+        raise HTTPException(status_code=400, detail="La tarea no tiene trabajador asignado")
+
+    worker_result = await session.execute(select(Worker).where(Worker.id == job.worker_id))
+    worker = worker_result.scalar_one_or_none()
+    if not worker:
+        raise HTTPException(status_code=400, detail="Trabajador no encontrado")
+
+    nombre = worker.name.split()[0]
+    body_text = f"Hola {nombre}, ¿cómo va la tarea?\n\n📋 *{job.title}*"
+    jid = str(job.id)
+    buttons = [
+        {"type": "reply", "reply": {"id": f"completado::{jid}",  "title": "✅ Terminada"}},
+        {"type": "reply", "reply": {"id": f"en_progreso::{jid}", "title": "🔄 En progreso"}},
+        {"type": "reply", "reply": {"id": f"atrasado::{jid}",    "title": "🚫 Bloqueada"}},
+    ]
+    await whatsapp.send_interactive_buttons(worker.phone_number, body_text, buttons)
     return {"ok": True}

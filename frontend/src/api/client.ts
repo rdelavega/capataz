@@ -171,3 +171,6 @@ export const updateJob = (id: string, data: JobUpdate) =>
 
 export const deleteJob = (id: string) =>
   apiFetch<{ ok: boolean }>(`/jobs/${id}`, { method: 'DELETE' })
+
+export const remindJob = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/jobs/${id}/remind`, { method: 'POST' })

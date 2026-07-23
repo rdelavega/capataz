@@ -12,6 +12,7 @@ from app.config import settings
 from app.db import AsyncSessionLocal
 from app.models.attendance import AttendanceDaily
 from app.models.event import Event
+from app.models.job import Job
 from app.models.worker import Worker
 from app.services import storage, transcription, whatsapp
 
@@ -113,6 +114,41 @@ async def _process(event_id: uuid.UUID, session) -> None:
                     text_content = transcription_text
             except Exception as e:
                 logger.error("event %s: failed to process audio: %s", event_id, e)
+
+    elif msg_type == "interactive":
+        interactive = msg.get("interactive", {})
+        if interactive.get("type") == "button_reply":
+            button_id = interactive.get("button_reply", {}).get("id", "")
+            parts = button_id.split("::")
+            if len(parts) == 2:
+                status, job_id_str = parts
+                if status in {"pendiente", "en_progreso", "completado", "atrasado"}:
+                    try:
+                        job_uuid = uuid.UUID(job_id_str)
+                        job_result = await session.execute(
+                            select(Job).where(
+                                Job.id == job_uuid,
+                                Job.worker_id == worker.id,
+                            )
+                        )
+                        job = job_result.scalar_one_or_none()
+                        if job:
+                            job.status = status
+                            nombre = worker.name.split()[0]
+                            REPLY = {
+                                "completado":  f"✅ Tarea marcada como terminada. ¡Buen trabajo, {nombre}!",
+                                "en_progreso": f"🔄 Entendido, {nombre}. Sigue adelante.",
+                                "atrasado":    f"🚫 Anotado, {nombre}. El jefe ya sabe.",
+                            }
+                            try:
+                                await whatsapp.send_text_message(phone_number, REPLY[status])
+                            except Exception as e:
+                                logger.error("event %s: failed to send button reply: %s", event_id, e)
+                        else:
+                            logger.warning("event %s: job %s not found for worker %s", event_id, job_id_str, worker.id)
+                    except ValueError:
+                        logger.warning("event %s: invalid job_id in button_id: %s", event_id, button_id)
+        event_type = "text"
 
     elif msg_type == "location":
         event_type = "location"

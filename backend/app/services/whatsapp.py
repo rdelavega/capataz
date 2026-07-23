@@ -20,6 +20,31 @@ async def download_media(media_id: str) -> bytes:
         return file_resp.content
 
 
+async def send_interactive_buttons(to: str, body_text: str, buttons: list[dict]) -> None:
+    """Envía un mensaje con botones de respuesta rápida (máx. 3 botones)."""
+    headers = {
+        "Authorization": f"Bearer {settings.whatsapp_token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": body_text},
+            "action": {"buttons": buttons},
+        },
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{GRAPH_API_BASE}/{settings.whatsapp_phone_number_id}/messages",
+            headers=headers,
+            json=payload,
+        )
+        resp.raise_for_status()
+
+
 async def send_text_message(to: str, body: str) -> None:
     """Envía un mensaje de texto al trabajador. Requiere que el worker haya escrito primero."""
     headers = {

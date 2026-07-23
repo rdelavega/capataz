@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { JobData, WorkerDetail } from '../api/client'
 import {
   createJob, deleteJob,
-  fetchJobs, fetchWorkers, updateJob,
+  fetchJobs, fetchWorkers, remindJob, updateJob,
 } from '../api/client'
 
 const STATUS_CFG: Record<string, { chip: string; label: string }> = {
@@ -191,12 +191,14 @@ function NewJobModal({ workers, onClose, onCreated }: {
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export function Tareas() {
-  const [jobs, setJobs]         = useState<JobData[]>([])
-  const [workers, setWorkers]   = useState<WorkerDetail[]>([])
-  const [filter, setFilter]     = useState('')
-  const [loading, setLoading]   = useState(true)
+  const [jobs, setJobs]           = useState<JobData[]>([])
+  const [workers, setWorkers]     = useState<WorkerDetail[]>([])
+  const [filter, setFilter]       = useState('')
+  const [loading, setLoading]     = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [err, setErr]           = useState<string | null>(null)
+  const [err, setErr]             = useState<string | null>(null)
+  const [reminding, setReminding] = useState<string | null>(null)
+  const [reminded, setReminded]   = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -224,6 +226,20 @@ export function Tareas() {
 
   function handleStatusChange(jobId: string, status: string) {
     setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: status as JobData['status'] } : j))
+  }
+
+  async function handleRemind(jobId: string) {
+    if (reminding) return
+    setReminding(jobId)
+    try {
+      await remindJob(jobId)
+      setReminded(jobId)
+      setTimeout(() => setReminded(null), 2500)
+    } catch (e) {
+      console.error('POST /jobs/remind error:', e)
+    } finally {
+      setReminding(null)
+    }
   }
 
   async function handleDelete(jobId: string) {
@@ -363,13 +379,25 @@ export function Tareas() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => handleDelete(job.id)}
-                      className="label text-[#8C7169] hover:text-[#A32D2D] transition-colors"
-                      title="Eliminar"
-                    >
-                      ✕
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      {job.worker_id && (
+                        <button
+                          onClick={() => handleRemind(job.id)}
+                          disabled={reminding === job.id}
+                          title="Pedir actualización por WhatsApp"
+                          className="label text-[#58423B] hover:text-[#D85A30] transition-colors disabled:opacity-40"
+                        >
+                          {reminded === job.id ? '✓ Enviado' : reminding === job.id ? '…' : '📲'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDelete(job.id)}
+                        className="label text-[#8C7169] hover:text-[#A32D2D] transition-colors"
+                        title="Eliminar"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
