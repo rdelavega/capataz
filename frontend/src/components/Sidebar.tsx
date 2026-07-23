@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { ClipboardList, LayoutDashboard, ListTodo, Users } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 
 export type Page = "dashboard" | "registros" | "equipo" | "tareas";
 
-const NAV: { icon: string; label: string; page: Page }[] = [
-  { icon: "▦", label: "Panel de Control", page: "dashboard" },
-  { icon: "≡", label: "Registros Diarios", page: "registros" },
-  { icon: "⬡", label: "Equipo", page: "equipo" },
-  { icon: "◈", label: "Tareas", page: "tareas" },
+const NAV: { icon: ReactNode; label: string; page: Page }[] = [
+  { icon: <LayoutDashboard size={16} />, label: "Panel de Control", page: "dashboard" },
+  { icon: <ClipboardList size={16} />,  label: "Registros Diarios", page: "registros" },
+  { icon: <Users size={16} />,          label: "Equipo",            page: "equipo" },
+  { icon: <ListTodo size={16} />,       label: "Tareas",            page: "tareas" },
 ];
 
 function useClock() {
@@ -75,10 +76,7 @@ export function Sidebar({ current, onNavigate }: Props) {
                   : "border-transparent text-[#2A2622] hover:bg-[#ECE1D3] hover:border-[#2A2622]",
               ].join(" ")}
             >
-              <span
-                style={{ fontSize: "1rem", lineHeight: 1 }}
-                aria-hidden="true"
-              >
+              <span className="shrink-0" aria-hidden="true">
                 {icon}
               </span>
               <span className="label">{label}</span>

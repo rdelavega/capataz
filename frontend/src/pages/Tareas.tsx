@@ -1,3 +1,4 @@
+import { ChevronDown, Loader2, Send, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { JobData, WorkerDetail } from '../api/client'
 import {
@@ -50,12 +51,10 @@ function StatusSelect({ jobId, current, onChanged }: {
   }
 
   return (
-    <div className="relative inline-flex items-center gap-1 group">
-      <span className={`${cfg.chip} pr-5 transition-opacity ${saving ? 'opacity-50' : ''}`}>
+    <div className="relative inline-flex group">
+      <span className={`${cfg.chip} inline-flex items-center gap-1.5 transition-opacity ${saving ? 'opacity-50' : ''}`}>
         {saving ? '…' : cfg.label}
-      </span>
-      <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] opacity-50 group-hover:opacity-100 transition-opacity">
-        ▾
+        <ChevronDown size={9} className="opacity-40 group-hover:opacity-90 transition-opacity shrink-0" />
       </span>
       <select
         value={current}
@@ -114,7 +113,7 @@ function NewJobModal({ workers, onClose, onCreated }: {
       <div className="w-full max-w-md border-2 border-[#2A2622] bg-[#FFF8F3] shadow-hard">
         <div className="border-b-2 border-[#2A2622] bg-[#D85A30] px-5 py-3 flex items-center justify-between">
           <h2 className="hl-sm text-white">Nueva tarea</h2>
-          <button onClick={onClose} className="label text-white hover:opacity-70">✕</button>
+          <button onClick={onClose} className="text-white hover:opacity-70"><X size={16} /></button>
         </div>
 
         <form onSubmit={submit} className="p-5 space-y-4">
@@ -124,7 +123,7 @@ function NewJobModal({ workers, onClose, onCreated }: {
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder="Ej. Instalar tuberías sección B"
-              className="mt-1 w-full border-2 border-[#2A2622] bg-white px-3 py-2 label focus:outline-none focus:border-[#D85A30]"
+              className="mt-1 w-full border-2 border-[#2A2622] bg-white px-3 py-2 mono text-sm text-[#2A2622] focus:outline-none focus:border-[#D85A30]"
               required
             />
           </div>
@@ -135,7 +134,7 @@ function NewJobModal({ workers, onClose, onCreated }: {
               value={desc}
               onChange={e => setDesc(e.target.value)}
               rows={2}
-              className="mt-1 w-full border-2 border-[#2A2622] bg-white px-3 py-2 label focus:outline-none focus:border-[#D85A30] resize-none"
+              className="mt-1 w-full border-2 border-[#2A2622] bg-white px-3 py-2 mono text-sm text-[#2A2622] focus:outline-none focus:border-[#D85A30] resize-none"
             />
           </div>
 
@@ -145,7 +144,7 @@ function NewJobModal({ workers, onClose, onCreated }: {
               <select
                 value={workerId}
                 onChange={e => setWorkerId(e.target.value)}
-                className="mt-1 w-full border-2 border-[#2A2622] bg-white px-3 py-2 label focus:outline-none focus:border-[#D85A30]"
+                className="mt-1 w-full border-2 border-[#2A2622] bg-white px-3 py-2 mono text-sm text-[#2A2622] focus:outline-none focus:border-[#D85A30]"
               >
                 <option value="">Sin asignar</option>
                 {workers.filter(w => w.active).map(w => (
@@ -159,7 +158,7 @@ function NewJobModal({ workers, onClose, onCreated }: {
                 type="date"
                 value={dueDate}
                 onChange={e => setDueDate(e.target.value)}
-                className="mt-1 w-full border-2 border-[#2A2622] bg-white px-3 py-2 label focus:outline-none focus:border-[#D85A30]"
+                className="mt-1 w-full border-2 border-[#2A2622] bg-white px-3 py-2 mono text-sm text-[#2A2622] focus:outline-none focus:border-[#D85A30]"
               />
             </div>
           </div>
@@ -381,21 +380,28 @@ export function Tareas() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       {job.worker_id && (
-                        <button
-                          onClick={() => handleRemind(job.id)}
-                          disabled={reminding === job.id}
-                          title="Pedir actualización por WhatsApp"
-                          className="label text-[#58423B] hover:text-[#D85A30] transition-colors disabled:opacity-40"
-                        >
-                          {reminded === job.id ? '✓ Enviado' : reminding === job.id ? '…' : '📲'}
-                        </button>
+                        reminded === job.id ? (
+                          <span className="label text-[#639922] text-xs">✓ Enviado</span>
+                        ) : (
+                          <button
+                            onClick={() => handleRemind(job.id)}
+                            disabled={!!reminding}
+                            title="Pedir actualización por WhatsApp"
+                            className="text-[#8C7169] hover:text-[#D85A30] transition-colors disabled:opacity-40"
+                          >
+                            {reminding === job.id
+                              ? <Loader2 size={15} className="animate-spin opacity-50" />
+                              : <Send size={15} />
+                            }
+                          </button>
+                        )
                       )}
                       <button
                         onClick={() => handleDelete(job.id)}
-                        className="label text-[#8C7169] hover:text-[#A32D2D] transition-colors"
+                        className="text-[#8C7169] hover:text-[#A32D2D] transition-colors"
                         title="Eliminar"
                       >
-                        ✕
+                        <Trash2 size={15} />
                       </button>
                     </div>
                   </td>

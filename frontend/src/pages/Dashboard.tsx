@@ -1,3 +1,4 @@
+import { RefreshCw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { OverviewResponse } from '../api/client'
 import { fetchOverview } from '../api/client'
@@ -88,7 +89,8 @@ export function Dashboard() {
           disabled={loading}
           className="label border-2 border-[#2A2622] bg-[#D85A30] px-4 py-2 text-white shadow-hard-sm transition-all hover:bg-[#A5360D] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-40"
         >
-          {loading ? 'Cargando...' : '↻ Actualizar'}
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          {loading ? 'Cargando…' : 'Actualizar'}
         </button>
       </header>
 

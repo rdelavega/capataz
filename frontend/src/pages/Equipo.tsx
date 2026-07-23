@@ -1,3 +1,4 @@
+import { RefreshCw, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { BranchOption, WorkerDetail, WorkersResponse } from '../api/client'
 import {
@@ -141,7 +142,7 @@ function AddWorkerModal({ branches, onClose, onSaved }: AddWorkerModalProps) {
           <button
             onClick={onClose}
             className="label flex h-7 w-7 items-center justify-center border-2 border-[#2A2622] text-[#58423B] hover:bg-[#2A2622] hover:text-white transition-colors"
-          >✕</button>
+          ><X size={14} /></button>
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
@@ -386,7 +387,7 @@ export function Equipo() {
             disabled={loading}
             className="label border-2 border-[#2A2622] px-4 py-2 text-[#58423B] hover:bg-[#ECE1D3] disabled:opacity-40 transition-colors"
           >
-            {loading ? 'Cargando...' : '↻'}
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </header>
