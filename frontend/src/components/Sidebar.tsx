@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 
-export type Page = "dashboard" | "registros" | "equipo";
+export type Page = "dashboard" | "registros" | "equipo" | "tareas";
 
 const NAV: { icon: string; label: string; page: Page }[] = [
   { icon: "▦", label: "Panel de Control", page: "dashboard" },
   { icon: "≡", label: "Registros Diarios", page: "registros" },
   { icon: "⬡", label: "Equipo", page: "equipo" },
+  { icon: "◈", label: "Tareas", page: "tareas" },
 ];
 
 function useClock() {

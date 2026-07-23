@@ -3,11 +3,13 @@ import { type Page, Sidebar } from './components/Sidebar'
 import { Dashboard } from './pages/Dashboard'
 import { RegistrosDiarios } from './pages/RegistrosDiarios'
 import { Equipo } from './pages/Equipo'
+import { Tareas } from './pages/Tareas'
 
 const PAGES: Record<Page, ReactElement> = {
   dashboard: <Dashboard />,
   registros: <RegistrosDiarios />,
   equipo:    <Equipo />,
+  tareas:    <Tareas />,
 }
 
 export default function App() {

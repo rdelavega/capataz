@@ -124,3 +124,50 @@ export const updateWorkerTitle = (id: string, title: string | null) =>
 
 export const deactivateWorker = (id: string) =>
   apiFetch<{ ok: boolean }>(`/workers/${id}`, { method: 'DELETE' })
+
+// ─── Jobs / Tareas ───────────────────────────────────────────────────────────
+
+export interface JobData {
+  id: string
+  title: string
+  description: string | null
+  status: 'pendiente' | 'en_progreso' | 'completado' | 'atrasado'
+  due_date: string | null
+  worker_id: string | null
+  worker_name: string | null
+  branch_id: string | null
+  branch_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface JobsResponse {
+  jobs: JobData[]
+}
+
+export interface JobCreate {
+  title: string
+  description?: string
+  worker_id?: string
+  due_date?: string
+}
+
+export interface JobUpdate {
+  title?: string
+  description?: string
+  status?: string
+  worker_id?: string
+  due_date?: string
+}
+
+export const fetchJobs = (status?: string) =>
+  apiFetch<JobsResponse>(`/jobs${status ? `?status=${status}` : ''}`)
+
+export const createJob = (data: JobCreate) =>
+  apiFetch<{ id: string }>('/jobs', { method: 'POST', body: JSON.stringify(data) })
+
+export const updateJob = (id: string, data: JobUpdate) =>
+  apiFetch<{ ok: boolean }>(`/jobs/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+
+export const deleteJob = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/jobs/${id}`, { method: 'DELETE' })
