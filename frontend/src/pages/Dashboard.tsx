@@ -4,7 +4,8 @@ import type { OverviewResponse } from "../api/client";
 import { fetchOverview } from "../api/client";
 import { BranchSection } from "../components/BranchSection";
 
-const POLL_MS = 30_000;
+const POLL_ACTIVE_MS  = 5_000
+const POLL_PASSIVE_MS = 60_000
 
 function fmtDate(iso: string) {
   return new Date(iso + "T12:00:00").toLocaleDateString("es-MX", {
@@ -84,10 +85,20 @@ export function Dashboard() {
   useEffect(() => {
     mounted.current = true;
     load();
-    const id = setInterval(load, POLL_MS);
+
+    let id = setInterval(load, document.hidden ? POLL_PASSIVE_MS : POLL_ACTIVE_MS);
+
+    function onVisibility() {
+      clearInterval(id);
+      id = setInterval(load, document.hidden ? POLL_PASSIVE_MS : POLL_ACTIVE_MS);
+      if (!document.hidden) load();
+    }
+
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       mounted.current = false;
       clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 

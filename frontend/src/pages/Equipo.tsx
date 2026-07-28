@@ -2,7 +2,7 @@ import { RefreshCw, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { BranchOption, WorkerDetail, WorkersResponse } from '../api/client'
 import {
-  createWorker, deactivateWorker, fetchBranches,
+  createBranch, createWorker, deactivateWorker, fetchBranches,
   fetchWorkers, updateWorkerTitle,
 } from '../api/client'
 
@@ -191,6 +191,66 @@ function AddWorkerModal({ branches, onClose, onSaved }: AddWorkerModalProps) {
   )
 }
 
+// ─── Modal: Agregar sucursal ──────────────────────────────────────────────────
+
+function AddBranchModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [name, setName]   = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      await createBranch(name.trim())
+      onSaved()
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#2A2622]/60"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="w-full max-w-sm mx-4 border-2 border-[#2A2622] bg-[#FFF8F3] shadow-[6px_6px_0_0_#2A2622]">
+        <div className="flex items-center justify-between border-b-2 border-[#2A2622] bg-[#ECE1D3] px-6 py-4">
+          <h2 className="hl-sm text-[#2A2622]">Agregar sucursal</h2>
+          <button
+            onClick={onClose}
+            className="label flex h-7 w-7 items-center justify-center border-2 border-[#2A2622] text-[#58423B] hover:bg-[#2A2622] hover:text-white transition-colors"
+          ><X size={14} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          <div>
+            <label className="label mb-1 block text-[#58423B]">Nombre *</label>
+            <input required value={name} onChange={e => setName(e.target.value)}
+              placeholder="Obra Norte, Sucursal Centro..."
+              autoFocus
+              className="mono w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
+          </div>
+          {error && <p className="mono text-sm text-[#A32D2D]">Error — {error}</p>}
+          <div className="flex justify-end gap-3 border-t-2 border-[#E0C0B6] pt-4">
+            <button type="button" onClick={onClose}
+              className="label border-2 border-[#2A2622] px-4 py-2 text-[#58423B] hover:bg-[#ECE1D3] transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving}
+              className="label border-2 border-[#2A2622] bg-[#D85A30] px-4 py-2 text-white shadow-[3px_3px_0_0_#2A2622] hover:bg-[#A5360D] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-40 transition-all">
+              {saving ? 'Guardando...' : '+ Crear'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── Fila de trabajador ───────────────────────────────────────────────────────
 
 function WorkerRow({
@@ -299,8 +359,9 @@ export function Equipo() {
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState<string | null>(null)
   const [showInactive, setShowInactive] = useState(false)
-  const [showModal, setShowModal]       = useState(false)
-  const [branches, setBranches]         = useState<BranchOption[]>([])
+  const [showModal, setShowModal]             = useState(false)
+  const [showBranchModal, setShowBranchModal] = useState(false)
+  const [branches, setBranches]               = useState<BranchOption[]>([])
 
   async function load() {
     setLoading(true)
@@ -377,10 +438,16 @@ export function Equipo() {
 
         <div className="ml-auto flex gap-3">
           <button
+            onClick={() => setShowBranchModal(true)}
+            className="label border-2 border-[#2A2622] px-4 py-2 text-[#58423B] hover:bg-[#ECE1D3] transition-colors"
+          >
+            + Sucursal
+          </button>
+          <button
             onClick={openModal}
             className="label border-2 border-[#2A2622] bg-[#D85A30] px-4 py-2 text-white shadow-[3px_3px_0_0_#2A2622] hover:bg-[#A5360D] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
           >
-            + Agregar trabajador
+            + Trabajador
           </button>
           <button
             onClick={load}
@@ -426,6 +493,13 @@ export function Equipo() {
           branches={branches}
           onClose={() => setShowModal(false)}
           onSaved={load}
+        />
+      )}
+
+      {showBranchModal && (
+        <AddBranchModal
+          onClose={() => setShowBranchModal(false)}
+          onSaved={() => { setBranches([]); load() }}
         />
       )}
     </div>

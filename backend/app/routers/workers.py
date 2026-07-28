@@ -9,6 +9,7 @@ from app.config import settings
 from app.db import get_db
 from app.models.branch import Branch
 from app.models.worker import Worker
+from app.services import whatsapp
 
 router = APIRouter(prefix="/workers", tags=["workers"])
 
@@ -24,6 +25,10 @@ class WorkerUpdate(BaseModel):
     title: str | None = None
 
 
+class BranchCreate(BaseModel):
+    name: str
+
+
 @router.get("/branches")
 async def list_branches(session: AsyncSession = Depends(get_db)) -> dict:
     company_id = uuid.UUID(settings.company_id)
@@ -34,6 +39,19 @@ async def list_branches(session: AsyncSession = Depends(get_db)) -> dict:
     )
     branches = result.scalars().all()
     return {"branches": [{"id": str(b.id), "name": b.name} for b in branches]}
+
+
+@router.post("/branches", status_code=201)
+async def create_branch(
+    body: BranchCreate,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    company_id = uuid.UUID(settings.company_id)
+    branch = Branch(company_id=company_id, name=body.name.strip())
+    session.add(branch)
+    await session.commit()
+    await session.refresh(branch)
+    return {"id": str(branch.id), "name": branch.name}
 
 
 @router.post("", status_code=201)
@@ -94,4 +112,28 @@ async def deactivate_worker(
         raise HTTPException(status_code=404, detail="Worker not found")
     worker.active = False
     await session.commit()
+    return {"ok": True}
+
+
+@router.post("/{worker_id}/remind", status_code=200)
+async def remind_worker(
+    worker_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    company_id = uuid.UUID(settings.company_id)
+    result = await session.execute(
+        select(Worker).where(
+            Worker.id == worker_id,
+            Worker.company_id == company_id,
+            Worker.active == True,
+        )
+    )
+    worker = result.scalar_one_or_none()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    first_name = worker.name.split()[0]
+    await whatsapp.send_text_message(
+        worker.phone_number,
+        f"¡Hola {first_name}! 👋 Aún no hemos recibido tu registro de hoy. Manda \"presente\" cuando llegues.",
+    )
     return {"ok": True}

@@ -1,4 +1,7 @@
+import { Bell, Check } from 'lucide-react'
+import { useState } from 'react'
 import type { WorkerData } from '../api/client'
+import { remindWorker } from '../api/client'
 import { StatusBadge } from './StatusBadge'
 
 interface Props {
@@ -35,6 +38,19 @@ const STAMP: Record<string, { cls: string; label: string }> = {
 export function WorkerFicha({ worker }: Props) {
   const barColor = BAR_COLOR[worker.today_status ?? ''] ?? '#8C7169'
   const stamp = STAMP[worker.today_status ?? 'null']
+  const [reminding, setReminding] = useState(false)
+  const [reminded,  setReminded]  = useState(false)
+
+  async function handleRemind() {
+    if (reminding || reminded) return
+    setReminding(true)
+    try {
+      await remindWorker(worker.id)
+      setReminded(true)
+    } finally {
+      setReminding(false)
+    }
+  }
 
   return (
     <div className="card-press shadow-hard relative flex overflow-hidden border-2 border-[#2A2622] bg-[#FFF8F3]">
@@ -87,9 +103,21 @@ export function WorkerFicha({ worker }: Props) {
           )}
         </dl>
 
-        {/* Bottom: status badge */}
-        <div className="mt-auto">
+        {/* Bottom: status + acción */}
+        <div className="mt-auto flex items-center justify-between gap-2">
           <StatusBadge status={worker.today_status} />
+          {worker.today_status === null && (
+            <button
+              onClick={handleRemind}
+              disabled={reminding || reminded}
+              className="flex items-center gap-1 border border-[#2A2622] px-2 py-1 label text-[10px] text-[#58423B] hover:bg-[#ECE1D3] disabled:opacity-50 transition-colors shrink-0"
+              title="Enviar recordatorio por WhatsApp"
+            >
+              {reminded
+                ? <><Check size={10} /> Enviado</>
+                : <><Bell size={10} /> {reminding ? '…' : 'Recordar'}</>}
+            </button>
+          )}
         </div>
       </div>
 

@@ -157,6 +157,12 @@ export interface WorkerCreate {
 export const fetchBranches = () =>
   apiFetch<BranchesResponse>('/workers/branches')
 
+export const createBranch = (name: string) =>
+  apiFetch<{ id: string; name: string }>('/workers/branches', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  })
+
 export const createWorker = (data: WorkerCreate) =>
   apiFetch<{ id: string; name: string }>('/workers', {
     method: 'POST',
@@ -221,3 +227,6 @@ export const deleteJob = (id: string) =>
 
 export const remindJob = (id: string) =>
   apiFetch<{ ok: boolean }>(`/jobs/${id}/remind`, { method: 'POST' })
+
+export const remindWorker = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/workers/${id}/remind`, { method: 'POST' })
