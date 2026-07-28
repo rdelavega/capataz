@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { EventLog, EventsResponse } from '../api/client'
 import { fetchEvents } from '../api/client'
 
@@ -23,8 +23,56 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
-function EventRow({ ev }: { ev: EventLog }) {
+// ─── Lightbox ─────────────────────────────────────────────────────────────────
+
+interface LightboxEntry { url: string; worker: string | null; time: string }
+
+function PhotoLightbox({ entry, onClose }: { entry: LightboxEntry; onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#2A2622]/80 p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="relative max-w-2xl w-full border-2 border-[#2A2622] bg-[#FFF8F3] shadow-[8px_8px_0_0_#2A2622]">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b-2 border-[#2A2622] bg-[#ECE1D3] px-4 py-3">
+          <div>
+            <span className="label text-[#2A2622]">{entry.worker ?? 'Trabajador'}</span>
+            <span className="mono text-xs text-[#8C7169] ml-3">{entry.time}</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="label flex h-7 w-7 items-center justify-center border-2 border-[#2A2622] text-[#58423B] hover:bg-[#2A2622] hover:text-white transition-colors"
+            aria-label="Cerrar"
+          >
+            ✕
+          </button>
+        </div>
+        {/* Image */}
+        <div className="bg-[#2A2622] flex items-center justify-center p-2">
+          <img
+            src={entry.url}
+            alt="Evidencia"
+            className="max-h-[70vh] max-w-full object-contain"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Fila de evento ───────────────────────────────────────────────────────────
+
+function EventRow({ ev, onPhoto }: { ev: EventLog; onPhoto: (entry: LightboxEntry) => void }) {
   const content = ev.transcription ?? ev.text_content
+  const isPhoto = ev.event_type === 'photo' && ev.media_url
+
   return (
     <tr className="border-b border-[#E0C0B6] hover:bg-[#FDF2E4] transition-colors">
       <td className="mono whitespace-nowrap px-4 py-3 text-[#2A2622]">{fmtTime(ev.received_at)}</td>
@@ -39,39 +87,61 @@ function EventRow({ ev }: { ev: EventLog }) {
           {TYPE_LABEL[ev.event_type] ?? ev.event_type}
         </span>
       </td>
-      <td className="max-w-xs px-4 py-3">
-        {ev.media_url && (
-          <a
-            href={ev.media_url}
-            target="_blank"
-            rel="noreferrer"
-            className="label text-[#D85A30] underline underline-offset-2"
+      <td className="px-4 py-3">
+        {isPhoto ? (
+          <button
+            onClick={() => onPhoto({ url: ev.media_url!, worker: ev.worker_name, time: fmtTime(ev.received_at) })}
+            className="group relative block"
+            title="Ver foto"
           >
-            Ver archivo ↗
-          </a>
-        )}
-        {content && (
-          <p className="mono mt-0.5 truncate text-[#2A2622]">{content}</p>
-        )}
-        {ev.latitude != null && ev.longitude != null && (
-          <p className="mono text-[#8C7169]">
-            {ev.latitude.toFixed(5)}, {ev.longitude.toFixed(5)}
-          </p>
-        )}
-        {!ev.media_url && !content && ev.latitude == null && (
-          <span className="mono text-[#8C7169]">—</span>
+            <img
+              src={ev.media_url!}
+              alt="Foto"
+              className="h-16 w-16 border-2 border-[#2A2622] object-cover shadow-[2px_2px_0_0_#2A2622] transition-transform group-hover:scale-105"
+            />
+            <div className="absolute inset-0 flex items-center justify-center bg-[#2A2622]/0 group-hover:bg-[#2A2622]/30 transition-colors">
+              <span className="opacity-0 group-hover:opacity-100 label text-white text-xs transition-opacity">Ver</span>
+            </div>
+          </button>
+        ) : (
+          <>
+            {ev.media_url && (
+              <a
+                href={ev.media_url}
+                target="_blank"
+                rel="noreferrer"
+                className="label text-[#D85A30] underline underline-offset-2"
+              >
+                Ver archivo ↗
+              </a>
+            )}
+            {content && (
+              <p className="mono mt-0.5 truncate text-[#2A2622]">{content}</p>
+            )}
+            {ev.latitude != null && ev.longitude != null && (
+              <p className="mono text-[#8C7169]">
+                {ev.latitude.toFixed(5)}, {ev.longitude.toFixed(5)}
+              </p>
+            )}
+            {!ev.media_url && !content && ev.latitude == null && (
+              <span className="mono text-[#8C7169]">—</span>
+            )}
+          </>
         )}
       </td>
     </tr>
   )
 }
 
+// ─── Página principal ─────────────────────────────────────────────────────────
+
 export function RegistrosDiarios() {
   const todayStr = new Date().toISOString().slice(0, 10)
   const [selectedDate, setSelectedDate] = useState(todayStr)
-  const [data, setData] = useState<EventsResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [data, setData]                 = useState<EventsResponse | null>(null)
+  const [loading, setLoading]           = useState(false)
+  const [error, setError]               = useState<string | null>(null)
+  const [lightbox, setLightbox]         = useState<LightboxEntry | null>(null)
 
   async function load(d: string) {
     setLoading(true)
@@ -137,15 +207,12 @@ export function RegistrosDiarios() {
 
         {Object.entries(byBranch).map(([branchName, events]) => (
           <section key={branchName}>
-            {/* Branch header */}
             <div className="mb-3 flex items-center justify-between border-b-2 border-[#2A2622] pb-2">
               <h2 className="hl-md text-[#2A2622]">{branchName}</h2>
               <span className="label text-[#8C7169]">{events.length} registros</span>
             </div>
 
-            {/* Table */}
             <div className="overflow-x-auto border-2 border-[#2A2622] bg-[#FFF8F3]">
-              {/* Table header */}
               <div className="flex items-center justify-between bg-[#2A2622] px-4 py-2">
                 <span className="label text-white">Bitácora de mensajes</span>
                 <span className="label text-[#8C7169]">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
@@ -159,18 +226,21 @@ export function RegistrosDiarios() {
                   </tr>
                 </thead>
                 <tbody>
-                  {events.map(ev => <EventRow key={ev.id} ev={ev} />)}
+                  {events.map(ev => (
+                    <EventRow key={ev.id} ev={ev} onPhoto={setLightbox} />
+                  ))}
                 </tbody>
               </table>
             </div>
           </section>
         ))}
 
-        {/* Skeleton */}
         {loading && !data && (
           <div className="h-64 animate-pulse border-2 border-[#E0C0B6] bg-[#FFF8F3]" />
         )}
       </main>
+
+      {lightbox && <PhotoLightbox entry={lightbox} onClose={() => setLightbox(null)} />}
     </div>
   )
 }
