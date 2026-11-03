@@ -40,24 +40,24 @@ export function Sidebar({ current, onNavigate, user, onLogout }: Props) {
   });
 
   return (
-    <aside className="fixed left-0 top-0 z-20 hidden h-screen w-56 md:flex flex-col border-r-2 border-[#2A2622] bg-[#FFF8F3]">
+    <aside className="fixed left-0 top-0 z-20 hidden h-screen w-56 md:flex flex-col border-r-2 border-[#2A2622] bg-[#2A2622] text-[#FFF8F3]">
       {/* Wordmark */}
-      <div className="border-b-2 border-[#2A2622] px-4 py-4">
+      <div className="border-b-2 border-[#4A423B] px-4 py-4">
         <div className="flex items-center gap-3">
           <img
             src="/logo.png"
             alt="Capataz"
-            className="h-9 w-9 shrink-0 border-2 border-[#2A2622] object-cover"
+            className="h-9 w-9 shrink-0 border-2 border-[#FFF8F3] object-cover"
           />
           <div>
             <h1 className="hl-md leading-none text-[#D85A30]">Capataz</h1>
-            <p className="label text-[#58423B]">Panel de control</p>
+            <p className="label text-[#C9B8AC]">Panel de control</p>
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5">
+      <nav className="flex-1 py-3 space-y-0.5">
         {NAV.map(({ icon, label, page }) => {
           const active = current === page;
           return (
@@ -65,10 +65,10 @@ export function Sidebar({ current, onNavigate, user, onLogout }: Props) {
               key={page}
               onClick={() => onNavigate(page)}
               className={[
-                "flex w-full items-center gap-3 px-3 py-2.5 border-2 text-left transition-colors",
+                "flex w-full items-center gap-3 border-l-4 px-4 py-2.5 text-left transition-colors",
                 active
-                  ? "bg-[#D85A30] border-[#2A2622] shadow-hard-sm text-white"
-                  : "border-transparent text-[#2A2622] hover:bg-[#ECE1D3] hover:border-[#2A2622]",
+                  ? "border-[#D85A30] bg-[#3A342E] text-white"
+                  : "border-transparent text-[#D9CCBF] hover:bg-[#3A342E] hover:text-white",
               ].join(" ")}
             >
               <span className="shrink-0" aria-hidden="true">{icon}</span>
@@ -79,35 +79,35 @@ export function Sidebar({ current, onNavigate, user, onLogout }: Props) {
       </nav>
 
       {/* System status */}
-      <div className="border-t-2 border-[#2A2622] px-4 py-3 space-y-2.5">
-        <p className="label text-[#8C7169]" style={{ fontSize: "10px", letterSpacing: "0.1em" }}>
+      <div className="border-t-2 border-[#4A423B] px-4 py-3 space-y-2.5">
+        <p className="label text-[#A8988C]" style={{ fontSize: "10px", letterSpacing: "0.1em" }}>
           SISTEMA
         </p>
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 shrink-0 rounded-full bg-[#639922]" aria-hidden="true" />
-            <span className="mono text-xs text-[#58423B]">Bot WhatsApp</span>
+            <span className="mono text-xs text-[#D9CCBF]">Bot WhatsApp</span>
           </div>
-          <span className="mono text-xs text-[#639922]">Activo</span>
+          <span className="mono text-xs text-[#9CCB5E]">Activo</span>
         </div>
 
-        <div className="flex items-center justify-between border-t border-[#E0C0B6] pt-2">
-          <span className="mono text-xs capitalize text-[#8C7169]">{today}</span>
-          <span className="mono text-xs text-[#8C7169]">{time}</span>
+        <div className="flex items-center justify-between border-t border-[#4A423B] pt-2">
+          <span className="mono text-xs capitalize text-[#A8988C]">{today}</span>
+          <span className="mono text-xs text-[#A8988C]">{time}</span>
         </div>
       </div>
 
       {/* Usuario + Salir */}
-      <div className="border-t-2 border-[#2A2622] px-4 py-3 flex items-center justify-between gap-2">
+      <div className="border-t-2 border-[#4A423B] px-4 py-3 flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="label text-[#2A2622] truncate">{user.name}</p>
-          <p className="mono text-[10px] text-[#8C7169] truncate">{user.email}</p>
+          <p className="label text-white truncate">{user.name}</p>
+          <p className="mono text-[10px] text-[#A8988C] truncate">{user.email}</p>
         </div>
         <button
           onClick={onLogout}
           title="Cerrar sesión"
-          className="shrink-0 text-[#8C7169] hover:text-[#A32D2D] transition-colors"
+          className="shrink-0 text-[#A8988C] hover:text-[#FFB59E] transition-colors"
         >
           <LogOut size={16} />
         </button>
@@ -120,7 +120,7 @@ export function Sidebar({ current, onNavigate, user, onLogout }: Props) {
 // al alcance del pulgar.
 export function MobileNav({ current, onNavigate, onLogout }: Omit<Props, "user">) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t-2 border-[#2A2622] bg-[#FFF8F3] pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t-2 border-[#2A2622] bg-[#2A2622] pb-[env(safe-area-inset-bottom)] md:hidden">
       {NAV.map(({ icon, short, page }) => {
         const active = current === page;
         return (
@@ -129,7 +129,7 @@ export function MobileNav({ current, onNavigate, onLogout }: Omit<Props, "user">
             onClick={() => onNavigate(page)}
             className={[
               "flex flex-1 flex-col items-center gap-1 py-2.5 transition-colors",
-              active ? "bg-[#D85A30] text-white" : "text-[#2A2622] active:bg-[#ECE1D3]",
+              active ? "bg-[#D85A30] text-white" : "text-[#D9CCBF] active:bg-[#3A342E]",
             ].join(" ")}
           >
             <span aria-hidden="true">{icon}</span>
@@ -140,7 +140,7 @@ export function MobileNav({ current, onNavigate, onLogout }: Omit<Props, "user">
       <button
         onClick={onLogout}
         title="Cerrar sesión"
-        className="flex flex-col items-center gap-1 border-l-2 border-[#2A2622] px-3 py-2.5 text-[#8C7169] active:text-[#A32D2D]"
+        className="flex flex-col items-center gap-1 border-l-2 border-[#4A423B] px-3 py-2.5 text-[#A8988C] active:text-[#FFB59E]"
       >
         <LogOut size={16} aria-hidden="true" />
         <span className="label" style={{ fontSize: "10px" }}>Salir</span>
