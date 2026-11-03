@@ -1,5 +1,10 @@
-from pydantic import field_validator
+import os
+
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+DEV_SECRET_KEY = "dev-secret-change-in-prod"
 
 
 class Settings(BaseSettings):
@@ -54,8 +59,22 @@ class Settings(BaseSettings):
     daily_summary_time: str = "18:00"
     allowed_origins: str = "http://localhost:5173,http://localhost:3000"
 
-    secret_key: str = "dev-secret-change-in-prod"
+    # Firma los tokens de login. En producción DEBE venir de la variable SECRET_KEY:
+    # con el valor por defecto (público en el repo) cualquiera podría falsificar un login.
+    secret_key: str = DEV_SECRET_KEY
     access_token_expire_minutes: int = 1440
+
+
+    @model_validator(mode="after")
+    def _require_secret_in_production(self) -> "Settings":
+        # Railway define RAILWAY_ENVIRONMENT_NAME en cada deploy.
+        in_railway = any(k.startswith("RAILWAY_ENVIRONMENT") for k in os.environ)
+        if in_railway and (self.secret_key == DEV_SECRET_KEY or len(self.secret_key) < 32):
+            raise ValueError(
+                "SECRET_KEY no está configurada (o es muy corta) en Railway. "
+                "Genera una con: python3 -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            )
+        return self
 
 
 settings = Settings()  # type: ignore[call-arg]

@@ -199,3 +199,21 @@ def test_scheduler_resumen_solo_con_plantilla(monkeypatch) -> None:
     assert scheduler.due_jobs(at_6pm) == []
     monkeypatch.setattr(scheduler.settings, "wa_template_daily_summary", "capataz_resumen_diario")
     assert [k for k, _ in scheduler.due_jobs(at_6pm)] == ["daily_summary"]
+
+
+# ─── SECRET_KEY obligatoria en producción ─────────────────────────────────────
+
+def test_secret_key_por_defecto_no_arranca_en_railway(monkeypatch) -> None:
+    from app.config import DEV_SECRET_KEY, Settings
+    monkeypatch.setenv("RAILWAY_ENVIRONMENT_NAME", "production")
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    with pytest.raises(ValueError, match="SECRET_KEY"):
+        Settings(secret_key=DEV_SECRET_KEY)
+    assert Settings(secret_key="x" * 48).secret_key == "x" * 48
+
+
+def test_secret_key_por_defecto_permitida_en_local(monkeypatch) -> None:
+    from app.config import Settings
+    for k in [k for k in __import__("os").environ if k.startswith("RAILWAY_ENVIRONMENT")]:
+        monkeypatch.delenv(k)
+    assert Settings().secret_key
