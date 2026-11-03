@@ -107,7 +107,7 @@ export function Dashboard() {
   return (
     <div className="min-h-screen bg-[#F2EDE4]">
       {/* Page header */}
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b-2 border-[#2A2622] bg-[#FFF8F3] px-8 py-4 shadow-[4px_4px_0_0_#2A2622]">
+      <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b-2 border-[#2A2622] bg-[#FFF8F3] px-4 py-3 md:px-8 md:py-4 shadow-[4px_4px_0_0_#2A2622]">
         <div>
           <h1 className="hl-md text-[#2A2622]">Panel de control</h1>
           {data && (
@@ -122,11 +122,11 @@ export function Dashboard() {
           className="flex justify-around label text-center border-2 border-[#2A2622] bg-[#D85A30] px-4 py-2.5 text-white shadow-hard-sm transition-all hover:bg-[#A5360D] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-40"
         >
           <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-          <div className="px-2">{loading ? "Cargando…" : "Actualizar"}</div>
+          <div className="hidden px-2 sm:block">{loading ? "Cargando…" : "Actualizar"}</div>
         </button>
       </header>
 
-      <main className="px-8 py-6 space-y-8">
+      <main className="px-4 py-5 md:px-8 md:py-6 space-y-8">
         {/* Error */}
         {error && (
           <div className="border-2 border-[#A32D2D] bg-[#FFF8F3] px-4 py-3">
@@ -168,7 +168,7 @@ export function Dashboard() {
         {/* Skeleton */}
         {!data && !error && (
           <div className="space-y-8">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {[0, 1, 2].map((i) => (
                 <div
                   key={i}

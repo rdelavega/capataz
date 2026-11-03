@@ -4,11 +4,11 @@ import type { AuthUser } from "../api/client";
 
 export type Page = "dashboard" | "registros" | "equipo" | "tareas";
 
-const NAV: { icon: ReactNode; label: string; page: Page }[] = [
-  { icon: <LayoutDashboard size={16} />, label: "Panel de Control", page: "dashboard" },
-  { icon: <ClipboardList size={16} />,  label: "Registros Diarios", page: "registros" },
-  { icon: <Users size={16} />,          label: "Equipo",            page: "equipo"    },
-  { icon: <ListTodo size={16} />,       label: "Tareas",            page: "tareas"    },
+const NAV: { icon: ReactNode; label: string; short: string; page: Page }[] = [
+  { icon: <LayoutDashboard size={16} />, label: "Panel de Control",  short: "Panel",     page: "dashboard" },
+  { icon: <ClipboardList size={16} />,  label: "Registros Diarios", short: "Registros", page: "registros" },
+  { icon: <Users size={16} />,          label: "Equipo",            short: "Equipo",    page: "equipo"    },
+  { icon: <ListTodo size={16} />,       label: "Tareas",            short: "Tareas",    page: "tareas"    },
 ];
 
 function useClock() {
@@ -40,7 +40,7 @@ export function Sidebar({ current, onNavigate, user, onLogout }: Props) {
   });
 
   return (
-    <aside className="fixed left-0 top-0 z-20 flex h-screen w-56 flex-col border-r-2 border-[#2A2622] bg-[#FFF8F3]">
+    <aside className="fixed left-0 top-0 z-20 hidden h-screen w-56 md:flex flex-col border-r-2 border-[#2A2622] bg-[#FFF8F3]">
       {/* Wordmark */}
       <div className="border-b-2 border-[#2A2622] px-4 py-4">
         <div className="flex items-center gap-3">
@@ -113,5 +113,38 @@ export function Sidebar({ current, onNavigate, user, onLogout }: Props) {
         </button>
       </div>
     </aside>
+  );
+}
+
+// En pantallas chicas el sidebar se oculta y la navegación vive abajo,
+// al alcance del pulgar.
+export function MobileNav({ current, onNavigate, onLogout }: Omit<Props, "user">) {
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t-2 border-[#2A2622] bg-[#FFF8F3] pb-[env(safe-area-inset-bottom)] md:hidden">
+      {NAV.map(({ icon, short, page }) => {
+        const active = current === page;
+        return (
+          <button
+            key={page}
+            onClick={() => onNavigate(page)}
+            className={[
+              "flex flex-1 flex-col items-center gap-1 py-2.5 transition-colors",
+              active ? "bg-[#D85A30] text-white" : "text-[#2A2622] active:bg-[#ECE1D3]",
+            ].join(" ")}
+          >
+            <span aria-hidden="true">{icon}</span>
+            <span className="label" style={{ fontSize: "10px" }}>{short}</span>
+          </button>
+        );
+      })}
+      <button
+        onClick={onLogout}
+        title="Cerrar sesión"
+        className="flex flex-col items-center gap-1 border-l-2 border-[#2A2622] px-3 py-2.5 text-[#8C7169] active:text-[#A32D2D]"
+      >
+        <LogOut size={16} aria-hidden="true" />
+        <span className="label" style={{ fontSize: "10px" }}>Salir</span>
+      </button>
+    </nav>
   );
 }

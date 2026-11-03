@@ -419,7 +419,7 @@ export function Equipo() {
 
   return (
     <div className="min-h-screen bg-[#F2EDE4]">
-      <header className="sticky top-0 z-10 flex items-center gap-4 border-b-2 border-[#2A2622] bg-[#FFF8F3] px-8 py-4 shadow-[4px_4px_0_0_#2A2622]">
+      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 md:gap-4 border-b-2 border-[#2A2622] bg-[#FFF8F3] px-4 py-3 md:px-8 md:py-4 shadow-[4px_4px_0_0_#2A2622]">
         <h1 className="hl-md text-[#2A2622]">Equipo</h1>
 
         {data && (
@@ -436,7 +436,7 @@ export function Equipo() {
           </>
         )}
 
-        <div className="ml-auto flex gap-3">
+        <div className="ml-auto flex gap-2 md:gap-3">
           <button
             onClick={() => setShowBranchModal(true)}
             className="label border-2 border-[#2A2622] px-4 py-2 text-[#58423B] hover:bg-[#ECE1D3] transition-colors"
@@ -459,7 +459,7 @@ export function Equipo() {
         </div>
       </header>
 
-      <main className="px-8 py-6 space-y-8">
+      <main className="px-4 py-5 md:px-8 md:py-6 space-y-8">
         {error && (
           <div className="border-2 border-[#A32D2D] bg-[#FFF8F3] px-4 py-3">
             <span className="label text-[#A32D2D]">Error — </span>

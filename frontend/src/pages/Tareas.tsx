@@ -110,7 +110,7 @@ function NewJobModal({ workers, onClose, onCreated }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2A2622]/60">
-      <div className="w-full max-w-md border-2 border-[#2A2622] bg-[#FFF8F3] shadow-hard">
+      <div className="w-full max-w-md mx-4 border-2 border-[#2A2622] bg-[#FFF8F3] shadow-hard">
         <div className="border-b-2 border-[#2A2622] bg-[#D85A30] px-5 py-3 flex items-center justify-between">
           <h2 className="hl-sm text-white">Nueva tarea</h2>
           <button onClick={onClose} className="text-white hover:opacity-70"><X size={16} /></button>
@@ -259,9 +259,9 @@ export function Tareas() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F2EDE4] p-6">
+    <div className="min-h-screen bg-[#F2EDE4] p-4 md:p-6">
       {/* Header */}
-      <div className="mb-6 flex items-start justify-between">
+      <div className="mb-6 flex items-start justify-between gap-3">
         <div>
           <h1 className="hl-lg text-[#2A2622]">Tareas</h1>
           <p className="label text-[#8C7169] mt-0.5">
@@ -278,7 +278,7 @@ export function Tareas() {
       </div>
 
       {/* Resumen rápido */}
-      <div className="mb-5 grid grid-cols-4 gap-3">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           { key: 'pendiente',   label: 'Pendientes',   color: '#8C7169' },
           { key: 'en_progreso', label: 'En progreso',  color: '#BA7517' },
