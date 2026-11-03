@@ -1,101 +1,12 @@
-import { RefreshCw, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { ChevronRight, RefreshCw, Search, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { BranchOption, WorkerDetail, WorkersResponse } from '../api/client'
-import {
-  createBranch, createWorker, deactivateWorker, fetchBranches,
-  fetchWorkers, updateWorkerTitle,
-} from '../api/client'
+import { createBranch, createWorker, fetchBranches, fetchWorkers } from '../api/client'
+import { AttendanceStrip } from '../components/Attendance'
+import { TodayStatus } from '../components/TodayStatus'
+import { useWorkerDrawer } from '../components/WorkerDrawer'
+import { EVENT_LABEL, fmtHace, initials } from '../lib/format'
 
-const EVENT_LABEL: Record<string, string> = {
-  checkin: 'Check-in', photo: 'Foto', audio: 'Audio',
-  location: 'Ubic.', text: 'Mensaje', unknown: 'Mensaje',
-}
-
-function fmtDateTime(iso: string) {
-  const d = new Date(iso)
-  return d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' }) +
-    ' ' + d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
-}
-
-// ─── Celda de puesto con edición inline ──────────────────────────────────────
-
-function TitleCell({
-  workerId,
-  initialTitle,
-  onSaved,
-}: {
-  workerId: string
-  initialTitle: string | null
-  onSaved: (title: string | null) => void
-}) {
-  const [editing, setEditing] = useState(false)
-  const [value, setValue]     = useState(initialTitle ?? '')
-  const [saving, setSaving]   = useState(false)
-  const [err, setErr]         = useState<string | null>(null)
-  const inputRef              = useRef<HTMLInputElement>(null)
-
-  function startEdit() {
-    setValue(initialTitle ?? '')
-    setErr(null)
-    setEditing(true)
-    setTimeout(() => inputRef.current?.focus(), 0)
-  }
-
-  async function save() {
-    if (saving) return
-    setSaving(true)
-    setErr(null)
-    const newTitle = value.trim() || null
-    try {
-      await updateWorkerTitle(workerId, newTitle)
-      onSaved(newTitle)
-      setEditing(false)
-    } catch (e) {
-      console.error('PATCH /workers error:', e)
-      setErr(e instanceof Error ? e.message : 'Error al guardar')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter')  { e.preventDefault(); save() }
-    if (e.key === 'Escape') { setValue(initialTitle ?? ''); setEditing(false); setErr(null) }
-  }
-
-  if (editing) {
-    return (
-      <div>
-        <input
-          ref={inputRef}
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          onBlur={save}
-          onKeyDown={onKeyDown}
-          disabled={saving}
-          placeholder="Sin puesto"
-          className="mono w-full border-2 border-[#D85A30] bg-white px-2 py-0.5 text-[#2A2622] outline-none disabled:opacity-50"
-        />
-        {err && <p className="mono mt-0.5 text-xs text-[#A32D2D]">{err}</p>}
-      </div>
-    )
-  }
-
-  return (
-    <button
-      onClick={startEdit}
-      title="Clic para editar"
-      className="group flex w-full items-center gap-1.5 text-left"
-    >
-      <span className="label text-[#2A2622] group-hover:text-[#D85A30] transition-colors">
-        {initialTitle ?? <span className="text-[#8C7169]">Sin puesto</span>}
-      </span>
-      <span className="opacity-0 group-hover:opacity-100 text-[#8C7169] transition-opacity text-xs" aria-hidden>
-        ✎
-      </span>
-    </button>
-  )
-}
 
 // ─── Modal: Agregar trabajador ────────────────────────────────────────────────
 
@@ -251,119 +162,82 @@ function AddBranchModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
   )
 }
 
-// ─── Fila de trabajador ───────────────────────────────────────────────────────
+// ─── Lista ────────────────────────────────────────────────────────────────────
 
-function WorkerRow({
-  worker,
-  onTitleSaved,
-  onDeactivate,
-}: {
-  worker: WorkerDetail
-  onTitleSaved: (id: string, title: string | null) => void
-  onDeactivate: (id: string) => void
-}) {
+type Filter = 'todos' | 'faltan' | 'tarde' | 'atrasos' | 'bajas'
+
+const FILTERS: { key: Filter; label: string; test: (w: WorkerDetail) => boolean; alert?: boolean }[] = [
+  { key: 'todos',   label: 'Todos',       test: w => w.active },
+  { key: 'faltan',  label: 'Faltan hoy',  test: w => w.active && (w.today_status === null || w.today_status === 'ausente'), alert: true },
+  { key: 'tarde',   label: 'Tarde hoy',   test: w => w.active && w.today_status === 'tarde', alert: true },
+  { key: 'atrasos', label: 'Con atrasos', test: w => w.active && w.overdue_jobs > 0, alert: true },
+  { key: 'bajas',   label: 'Dados de baja', test: w => !w.active },
+]
+
+const STRIPE: Record<string, string> = {
+  presente: 'bg-[#639922]', tarde: 'bg-[#BA7517]', ausente: 'bg-[#A32D2D]', none: 'bg-[#E0C0B6]',
+}
+
+function WorkerRow({ w, onOpen }: { w: WorkerDetail; onOpen: () => void }) {
   return (
-    <tr className="border-b border-[#E0C0B6] hover:bg-[#FDF2E4] transition-colors">
-      <td className="px-5 py-3">
-        <span className="hl-sm text-[#2A2622]">{worker.name}</span>
-      </td>
-      <td className="px-4 py-2.5 min-w-[140px]">
-        <TitleCell
-          workerId={worker.id}
-          initialTitle={worker.title}
-          onSaved={title => onTitleSaved(worker.id, title)}
-        />
-      </td>
-      <td className="px-4 py-3">
-        <span className="mono text-[#2A2622]">{worker.phone_number}</span>
-      </td>
-      <td className="px-4 py-3">
-        {worker.active
-          ? <span className="chip chip-green">Activo</span>
-          : <span className="chip chip-gray">Inactivo</span>}
-      </td>
-      <td className="px-4 py-3 text-center">
-        <span className="mono tabular-nums text-[#2A2622]">{worker.events_today}</span>
-      </td>
-      <td className="px-4 py-3">
-        {worker.last_event ? (
-          <span className="mono text-[#58423B]">
-            {EVENT_LABEL[worker.last_event.type] ?? 'Mensaje'} · {fmtDateTime(worker.last_event.received_at)}
+    <tr
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}
+      className="cursor-pointer border-b border-[#E0C0B6] transition-colors hover:bg-[#FBEBDD] focus-visible:bg-[#FBEBDD]"
+    >
+      <td className={`w-1.5 p-0 ${STRIPE[w.today_status ?? 'none']}`} aria-hidden="true" />
+      <td className="px-3 py-2">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[#2A2622] bg-[#ECE1D3] font-headline text-xs font-semibold">
+            {initials(w.name)}
           </span>
-        ) : (
-          <span className="mono text-[#8C7169]">Sin contacto</span>
-        )}
+          <div className="min-w-0">
+            <p className="truncate font-semibold leading-tight">{w.name}</p>
+            <p className="mono truncate text-[11px] text-[#8C7169]">{w.title ?? 'Sin puesto'}</p>
+          </div>
+        </div>
       </td>
-      <td className="px-4 py-3">
-        {worker.active && (
-          <button
-            onClick={() => {
-              if (confirm(`¿Dar de baja a ${worker.name}?`)) onDeactivate(worker.id)
-            }}
-            className="label border border-[#A32D2D] px-2 py-1 text-xs text-[#A32D2D] hover:bg-[#A32D2D] hover:text-white transition-colors"
-          >
-            Dar de baja
-          </button>
-        )}
+      <td className="px-3 py-2">{w.active ? <TodayStatus status={w.today_status} checkinAt={w.checkin_at} /> : <span className="chip chip-gray">Baja</span>}</td>
+      <td className="mono hidden px-3 py-2 text-xs text-[#58423B] md:table-cell">
+        {w.last_event ? `${fmtHace(w.last_event.received_at)} · ${(EVENT_LABEL[w.last_event.type] ?? 'mensaje').toLowerCase()}` : 'nunca ha escrito'}
       </td>
+      <td className="mono hidden px-3 py-2 text-xs tabular-nums sm:table-cell">
+        {w.active_jobs}
+        {w.overdue_jobs > 0 && <span className="font-bold text-[#A32D2D]"> · {w.overdue_jobs} atrasada{w.overdue_jobs > 1 ? 's' : ''}</span>}
+      </td>
+      <td className="hidden px-3 py-2 lg:table-cell"><AttendanceStrip codes={w.attendance_30d} /></td>
+      <td className={`mono hidden px-3 py-2 text-xs tabular-nums lg:table-cell ${w.attendance_pct !== null && w.attendance_pct < 90 ? 'font-bold text-[#BA7517]' : ''}`}>
+        {w.attendance_pct !== null ? `${w.attendance_pct}%` : '—'}
+      </td>
+      <td className="px-2 text-[#8C7169]"><ChevronRight size={16} aria-hidden="true" /></td>
     </tr>
   )
 }
 
-function BranchGroup({
-  name, workers, onTitleSaved, onDeactivate,
-}: {
-  name: string
-  workers: WorkerDetail[]
-  onTitleSaved: (id: string, title: string | null) => void
-  onDeactivate: (id: string) => void
-}) {
-  const active = workers.filter(w => w.active).length
-  return (
-    <section>
-      <div className="mb-3 flex items-center justify-between border-b-2 border-[#2A2622] pb-2">
-        <h2 className="hl-md text-[#2A2622]">{name}</h2>
-        <span className="label text-[#8C7169]">
-          {active} {active === 1 ? 'trabajador activo' : 'trabajadores activos'}
-        </span>
-      </div>
-      <div className="overflow-x-auto border-2 border-[#2A2622] bg-[#FFF8F3]">
-        <table className="w-full min-w-[780px]">
-          <thead>
-            <tr className="border-b-2 border-[#2A2622] bg-[#ECE1D3]">
-              {['Nombre', 'Puesto', 'Teléfono', 'Estado', 'Mensajes hoy', 'Último contacto', ''].map((h, i) => (
-                <th key={i} className="label px-4 py-2 text-left text-[#58423B] first:pl-5">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {workers.map(w => (
-              <WorkerRow
-                key={w.id}
-                worker={w}
-                onTitleSaved={onTitleSaved}
-                onDeactivate={onDeactivate}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  )
+function groupSummary(ws: WorkerDetail[]): string {
+  const active = ws.filter(w => w.active)
+  const here = active.filter(w => w.today_status === 'presente' || w.today_status === 'tarde').length
+  const overdue = active.reduce((n, w) => n + w.overdue_jobs, 0)
+  const parts = [`${active.length} ${active.length === 1 ? 'persona' : 'personas'}`, `${here} llegaron`]
+  if (overdue) parts.push(`${overdue} tarea${overdue > 1 ? 's' : ''} atrasada${overdue > 1 ? 's' : ''}`)
+  return parts.join(' · ')
 }
 
-// ─── Página principal ─────────────────────────────────────────────────────────
+// ─── Página ───────────────────────────────────────────────────────────────────
 
 export function Equipo() {
-  const [data, setData]                 = useState<WorkersResponse | null>(null)
-  const [loading, setLoading]           = useState(false)
-  const [error, setError]               = useState<string | null>(null)
-  const [showInactive, setShowInactive] = useState(false)
+  const [data, setData]       = useState<WorkersResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError]     = useState<string | null>(null)
+  const [query, setQuery]     = useState('')
+  const [filter, setFilter]   = useState<Filter>('todos')
   const [showModal, setShowModal]             = useState(false)
   const [showBranchModal, setShowBranchModal] = useState(false)
   const [branches, setBranches]               = useState<BranchOption[]>([])
+  const { openWorker, version } = useWorkerDrawer()
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       setData(await fetchWorkers())
@@ -373,13 +247,14 @@ export function Equipo() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => { load() }, [load, version])
 
   async function openModal() {
     if (branches.length === 0) {
       try {
-        const res = await fetchBranches()
-        setBranches(res.branches)
+        setBranches((await fetchBranches()).branches)
       } catch {
         setError('No se pudieron cargar las sucursales')
         return
@@ -388,78 +263,47 @@ export function Equipo() {
     setShowModal(true)
   }
 
-  function handleTitleSaved(id: string, title: string | null) {
-    setData(prev => {
-      if (!prev) return prev
-      return { workers: prev.workers.map(w => w.id === id ? { ...w, title } : w) }
-    })
-  }
+  const workers = useMemo(() => data?.workers ?? [], [data])
+  const counts = useMemo(
+    () => Object.fromEntries(FILTERS.map(f => [f.key, workers.filter(f.test).length])) as Record<Filter, number>,
+    [workers],
+  )
 
-  async function handleDeactivate(id: string) {
-    try {
-      await deactivateWorker(id)
-      await load()
-    } catch {
-      setError('No se pudo dar de baja al trabajador')
+  const visible = useMemo(() => {
+    const test = FILTERS.find(f => f.key === filter)!.test
+    const q = query.trim().toLowerCase()
+    const digits = q.replace(/\D/g, '')
+    return workers.filter(w =>
+      test(w) && (!q || w.name.toLowerCase().includes(q) || (digits.length >= 3 && w.phone_number.includes(digits)))
+    )
+  }, [workers, filter, query])
+
+  const groups = useMemo(() => {
+    const map = new Map<string, WorkerDetail[]>()
+    for (const w of visible) {
+      const key = w.branch_name ?? 'Sin sucursal'
+      map.set(key, [...(map.get(key) ?? []), w])
     }
-  }
-
-  useEffect(() => { load() }, [])
-
-  const filtered = data ? data.workers.filter(w => showInactive || w.active) : []
-
-  const byBranch = filtered.reduce<Record<string, WorkerDetail[]>>((acc, w) => {
-    const key = w.branch_name ?? 'Sin sucursal'
-    ;(acc[key] ??= []).push(w)
-    return acc
-  }, {})
-
-  const totalActive   = data ? data.workers.filter(w => w.active).length : 0
-  const totalInactive = data ? data.workers.filter(w => !w.active).length : 0
+    return [...map.entries()]
+  }, [visible])
 
   return (
     <div className="min-h-screen bg-[#F2EDE4]">
-      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 md:gap-4 border-b-2 border-[#2A2622] bg-[#FFF8F3] px-4 py-3 md:px-8 md:py-4 shadow-[4px_4px_0_0_#2A2622]">
-        <h1 className="hl-md text-[#2A2622]">Equipo</h1>
-
-        {data && (
-          <>
-            <span className="label text-[#8C7169]">{totalActive} activos</span>
-            {totalInactive > 0 && (
-              <button
-                onClick={() => setShowInactive(p => !p)}
-                className="label border-2 border-[#2A2622] px-3 py-1 text-[#58423B] hover:bg-[#ECE1D3] transition-colors"
-              >
-                {showInactive ? 'Ocultar inactivos' : `Ver ${totalInactive} inactivos`}
-              </button>
-            )}
-          </>
-        )}
-
+      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b-2 border-[#2A2622] bg-[#FFF8F3] px-4 py-3 shadow-[4px_4px_0_0_#2A2622] md:gap-4 md:px-8 md:py-4">
+        <div>
+          <h1 className="hl-md text-[#2A2622]">Equipo</h1>
+          {data && <p className="label text-[#8C7169]">{counts.todos} activos</p>}
+        </div>
         <div className="ml-auto flex gap-2 md:gap-3">
-          <button
-            onClick={() => setShowBranchModal(true)}
-            className="label border-2 border-[#2A2622] px-4 py-2 text-[#58423B] hover:bg-[#ECE1D3] transition-colors"
-          >
-            + Sucursal
-          </button>
-          <button
-            onClick={openModal}
-            className="label border-2 border-[#2A2622] bg-[#D85A30] px-4 py-2 text-white shadow-[3px_3px_0_0_#2A2622] hover:bg-[#A5360D] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
-          >
-            + Trabajador
-          </button>
-          <button
-            onClick={load}
-            disabled={loading}
-            className="label border-2 border-[#2A2622] px-4 py-2 text-[#58423B] hover:bg-[#ECE1D3] disabled:opacity-40 transition-colors"
-          >
+          <button onClick={() => setShowBranchModal(true)} className="btn">+ Sucursal</button>
+          <button onClick={openModal} className="btn btn-primary">+ Trabajador</button>
+          <button onClick={load} disabled={loading} className="btn" aria-label="Actualizar">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </header>
 
-      <main className="px-4 py-5 md:px-8 md:py-6 space-y-8">
+      <main className="space-y-4 px-4 py-5 md:px-8 md:py-6">
         {error && (
           <div className="border-2 border-[#A32D2D] bg-[#FFF8F3] px-4 py-3">
             <span className="label text-[#A32D2D]">Error — </span>
@@ -467,40 +311,83 @@ export function Equipo() {
           </div>
         )}
 
-        {loading && !data && (
-          <div className="h-64 animate-pulse border-2 border-[#E0C0B6] bg-[#FFF8F3]" />
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex min-w-[220px] flex-1 items-center gap-2 border-2 border-[#2A2622] bg-[#FFF8F3] px-3 py-2 focus-within:border-[#D85A30]">
+            <Search size={14} className="text-[#8C7169]" aria-hidden="true" />
+            <span className="sr-only">Buscar trabajador</span>
+            <input
+              id="team-search"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Buscar por nombre o teléfono…"
+              className="mono w-full bg-transparent text-sm outline-none placeholder:text-[#8C7169]"
+            />
+          </label>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar equipo">
+            {FILTERS.filter(f => f.key !== 'bajas' || counts.bajas > 0).map(f => {
+              const on = filter === f.key
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => setFilter(f.key)}
+                  aria-pressed={on}
+                  className={`label border-2 border-[#2A2622] px-2.5 py-1.5 transition-colors ${on ? 'bg-[#2A2622] text-white' : 'bg-[#FFF8F3] text-[#2A2622] hover:bg-[#ECE1D3]'}`}
+                >
+                  {f.label}{' '}
+                  <span className={f.alert && counts[f.key] > 0 ? (on ? 'text-[#FFB59E]' : 'text-[#A32D2D]') : ''}>{counts[f.key]}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
-        {data && filtered.length === 0 && (
+        {loading && !data && <div className="h-64 animate-pulse border-2 border-[#E0C0B6] bg-[#FFF8F3]" />}
+
+        {data && visible.length === 0 && (
           <div className="border-2 border-[#E0C0B6] bg-[#FFF8F3] px-6 py-12 text-center">
-            <p className="hl-sm text-[#8C7169]">Sin trabajadores</p>
+            <p className="hl-sm text-[#8C7169]">
+              {workers.length === 0 ? 'Todavía no hay trabajadores' : filter === 'faltan' ? 'Hoy no falta nadie' : 'Nadie coincide'}
+            </p>
+            {workers.length === 0 && <p className="mono mt-1 text-xs text-[#8C7169]">Agrega al primero con el botón de arriba.</p>}
           </div>
         )}
 
-        {Object.entries(byBranch).map(([name, workers]) => (
-          <BranchGroup
-            key={name}
-            name={name}
-            workers={workers}
-            onTitleSaved={handleTitleSaved}
-            onDeactivate={handleDeactivate}
-          />
-        ))}
+        {groups.length > 0 && (
+          <div className="overflow-x-auto border-2 border-[#2A2622] bg-[#FFF8F3]">
+            <table className="w-full min-w-[340px] border-collapse">
+              <thead>
+                <tr className="border-b-2 border-[#2A2622] bg-[#ECE1D3]">
+                  <th className="w-1.5 p-0"><span className="sr-only">Estado</span></th>
+                  <th className="label px-3 py-2 text-left text-[#58423B]">Trabajador</th>
+                  <th className="label px-3 py-2 text-left text-[#58423B]">Hoy</th>
+                  <th className="label hidden px-3 py-2 text-left text-[#58423B] md:table-cell">Último reporte</th>
+                  <th className="label hidden px-3 py-2 text-left text-[#58423B] sm:table-cell">Tareas</th>
+                  <th className="label hidden px-3 py-2 text-left text-[#58423B] lg:table-cell">Últimos 30 días</th>
+                  <th className="label hidden px-3 py-2 text-left text-[#58423B] lg:table-cell">Asist.</th>
+                  <th className="w-6"><span className="sr-only">Abrir</span></th>
+                </tr>
+              </thead>
+              {groups.map(([name, ws]) => (
+                <tbody key={name}>
+                  <tr className="border-y-2 border-[#2A2622] bg-[#E5DFD3]">
+                    <td colSpan={8} className="px-3 py-1.5">
+                      <span className="font-headline text-sm font-semibold uppercase tracking-wide">{name}</span>
+                      <span className="mono ml-3 text-[11px] text-[#58423B]">{groupSummary(ws)}</span>
+                    </td>
+                  </tr>
+                  {ws.map(w => <WorkerRow key={w.id} w={w} onOpen={() => openWorker(w.id)} />)}
+                </tbody>
+              ))}
+            </table>
+          </div>
+        )}
       </main>
 
       {showModal && branches.length > 0 && (
-        <AddWorkerModal
-          branches={branches}
-          onClose={() => setShowModal(false)}
-          onSaved={load}
-        />
+        <AddWorkerModal branches={branches} onClose={() => setShowModal(false)} onSaved={load} />
       )}
-
       {showBranchModal && (
-        <AddBranchModal
-          onClose={() => setShowBranchModal(false)}
-          onSaved={() => { setBranches([]); load() }}
-        />
+        <AddBranchModal onClose={() => setShowBranchModal(false)} onSaved={() => { setBranches([]); load() }} />
       )}
     </div>
   )

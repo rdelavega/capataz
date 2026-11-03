@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { EventLog, EventsResponse } from '../api/client'
 import { fetchEvents } from '../api/client'
+import { PhotoLightbox, type LightboxEntry } from '../components/PhotoLightbox'
 
 const TYPE_LABEL: Record<string, string> = {
   checkin:  'Check-in',
@@ -21,50 +22,6 @@ const TYPE_CHIP: Record<string, string> = {
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
-
-// ─── Lightbox ─────────────────────────────────────────────────────────────────
-
-interface LightboxEntry { url: string; worker: string | null; time: string }
-
-function PhotoLightbox({ entry, onClose }: { entry: LightboxEntry; onClose: () => void }) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#2A2622]/80 p-4"
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div className="relative max-w-2xl w-full border-2 border-[#2A2622] bg-[#FFF8F3] shadow-[8px_8px_0_0_#2A2622]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b-2 border-[#2A2622] bg-[#ECE1D3] px-4 py-3">
-          <div>
-            <span className="label text-[#2A2622]">{entry.worker ?? 'Trabajador'}</span>
-            <span className="mono text-xs text-[#8C7169] ml-3">{entry.time}</span>
-          </div>
-          <button
-            onClick={onClose}
-            className="label flex h-7 w-7 items-center justify-center border-2 border-[#2A2622] text-[#58423B] hover:bg-[#2A2622] hover:text-white transition-colors"
-            aria-label="Cerrar"
-          >
-            ✕
-          </button>
-        </div>
-        {/* Image */}
-        <div className="bg-[#2A2622] flex items-center justify-center p-2">
-          <img
-            src={entry.url}
-            alt="Evidencia"
-            className="max-h-[70vh] max-w-full object-contain"
-          />
-        </div>
-      </div>
-    </div>
-  )
 }
 
 // ─── Fila de evento ───────────────────────────────────────────────────────────
@@ -90,7 +47,7 @@ function EventRow({ ev, onPhoto }: { ev: EventLog; onPhoto: (entry: LightboxEntr
       <td className="px-4 py-3">
         {isPhoto ? (
           <button
-            onClick={() => onPhoto({ url: ev.media_url!, worker: ev.worker_name, time: fmtTime(ev.received_at) })}
+            onClick={() => onPhoto({ url: ev.media_url!, title: ev.worker_name, subtitle: fmtTime(ev.received_at) })}
             className="group relative block"
             title="Ver foto"
           >

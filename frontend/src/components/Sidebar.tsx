@@ -5,7 +5,7 @@ import type { AuthUser } from "../api/client";
 export type Page = "dashboard" | "registros" | "equipo" | "tareas";
 
 const NAV: { icon: ReactNode; label: string; short: string; page: Page }[] = [
-  { icon: <LayoutDashboard size={16} />, label: "Panel de Control",  short: "Panel",     page: "dashboard" },
+  { icon: <LayoutDashboard size={16} />, label: "Hoy",               short: "Hoy",     page: "dashboard" },
   { icon: <ClipboardList size={16} />,  label: "Registros Diarios", short: "Registros", page: "registros" },
   { icon: <Users size={16} />,          label: "Equipo",            short: "Equipo",    page: "equipo"    },
   { icon: <ListTodo size={16} />,       label: "Tareas",            short: "Tareas",    page: "tareas"    },
