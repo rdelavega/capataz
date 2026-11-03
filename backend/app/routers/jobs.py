@@ -261,6 +261,11 @@ async def remind_job(
         raise HTTPException(status_code=400, detail="La tarea no tiene trabajador asignado")
     try:
         await notify.job_progress(session, job.company_id, job, worker, local_today())
+    except notify.NoWindow as e:
+        raise HTTPException(
+            status_code=409,
+            detail="No ha escrito en 24 h y WhatsApp no deja mandarle mensaje. Escríbele desde tu celular.",
+        ) from e
     except Exception as e:
         await session.commit()
         raise HTTPException(

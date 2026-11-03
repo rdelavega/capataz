@@ -169,6 +169,11 @@ async def remind_worker(
         raise HTTPException(status_code=404, detail="Worker not found")
     try:
         await notify.checkin_reminder(session, company_id, worker)
+    except notify.NoWindow as e:
+        raise HTTPException(
+            status_code=409,
+            detail="No ha escrito en 24 h y WhatsApp no deja mandarle mensaje. Escríbele desde tu celular.",
+        ) from e
     except Exception as e:
         raise HTTPException(
             status_code=502,

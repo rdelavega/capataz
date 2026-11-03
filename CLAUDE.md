@@ -108,8 +108,11 @@ WhatsApp (trabajador)
   después de 1,000/mes por número (~$0.0085 USD en México), igual que una
   plantilla de utilidad. Por eso **sí hay mensajes proactivos** (el bot
   persigue a la gente): recordatorio de llegada, avance de tareas y resumen
-  diario al dueño, con plantillas (`docs/plantillas_whatsapp.md`). Sin
-  plantilla configurada, ese envío no corre.
+  diario al dueño. A trabajadores se les escribe **sin plantilla** si
+  escribieron en las últimas 24 h (lo normal: mandan "presente"); la
+  plantilla es solo respaldo. El resumen al dueño siempre usa plantilla
+  (`docs/plantillas_whatsapp.md`). Ojo: Meta reclasifica como marketing (5×
+  más caro) lo que suene a "¿cómo va?"; redactar como aviso de algo concreto.
 - **El producto es "dejar de perseguir gente"**: el panel muestra pendientes
   accionables (quién falta, qué se atoró, qué aprobar), no solo contadores.
   Las reglas viven en `app/services/insights.py`; panel, ficha y resumen de

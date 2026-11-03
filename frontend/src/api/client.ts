@@ -16,7 +16,11 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     window.location.reload()
     throw new Error('Sesión expirada')
   }
-  if (!res.ok) throw new Error(`Error ${res.status}`)
+  if (!res.ok) {
+    // El backend explica en `detail` qué pasó (ej. "No ha escrito en 24 h…")
+    const body = await res.json().catch(() => null)
+    throw new Error(typeof body?.detail === 'string' ? body.detail : `Error ${res.status}`)
+  }
   return res.json()
 }
 

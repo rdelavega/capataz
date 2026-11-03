@@ -2,16 +2,22 @@
 Mensajes que el bot manda por iniciativa propia. Cada envío queda en
 `notifications`, así el dashboard puede decir "el bot le preguntó a las 8:30".
 
-Con plantilla configurada se usa la plantilla (llega aunque el trabajador no
-haya escrito en 24 h). Sin plantilla se intenta un mensaje normal, que Meta
-solo entrega dentro de la ventana de 24 h.
+Orden de preferencia para hablarle a un trabajador:
+1. Si escribió en las últimas 24 h (ventana de servicio abierta): mensaje
+   normal con botones. No necesita plantilla y cae en los 1,000 mensajes de
+   servicio gratis al mes. Es el caso común: casi todos mandan "presente".
+2. Si no, y hay plantilla configurada: la plantilla (se cobra como utilidad).
+3. Si no hay ninguna de las dos: NoWindow, y no se manda nada.
 """
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.models.event import Event
 from app.models.job import Job
 from app.models.notification import Notification
 from app.models.user import User
@@ -21,6 +27,22 @@ from app.services.insights import Snapshot, job_is_overdue
 from app.timeutil import fmt_dia
 
 logger = logging.getLogger(__name__)
+
+
+# Margen para no mandar justo cuando la ventana de 24 h se está cerrando.
+SERVICE_WINDOW = timedelta(hours=23, minutes=30)
+
+
+class NoWindow(Exception):
+    """El trabajador no ha escrito en 24 h y no hay plantilla: WhatsApp no lo entregaría."""
+
+
+async def window_open(session: AsyncSession, worker_id: uuid.UUID) -> bool:
+    """¿El trabajador escribió en las últimas ~24 h? (ventana de servicio de Meta)."""
+    last = (await session.execute(
+        select(func.max(Event.received_at)).where(Event.worker_id == worker_id)
+    )).scalar_one_or_none()
+    return last is not None and datetime.now(tz=timezone.utc) - last < SERVICE_WINDOW
 
 
 def _first_name(name: str) -> str:
@@ -38,16 +60,23 @@ async def _log(session: AsyncSession, company_id: uuid.UUID, kind: str, *, worke
 
 async def checkin_reminder(session: AsyncSession, company_id: uuid.UUID, worker: Worker) -> None:
     nombre = _first_name(worker.name)
+    in_window = await window_open(session, worker.id)
+    if not in_window and not settings.wa_template_checkin_reminder:
+        raise NoWindow(worker.name)
     try:
-        if settings.wa_template_checkin_reminder:
+        if in_window:
+            await whatsapp.send_interactive_buttons(
+                worker.phone_number,
+                f"¡Hola {nombre}! 👋 Aún no tenemos tu registro de hoy.",
+                [
+                    {"type": "reply", "reply": {"id": "checkin", "title": "✅ Ya llegué"}},
+                    {"type": "reply", "reply": {"id": "ausente", "title": "Hoy no voy"}},
+                ],
+            )
+        else:
             await whatsapp.send_template(
                 worker.phone_number, settings.wa_template_checkin_reminder, [nombre],
                 quick_reply_payloads=["checkin", "ausente"],
-            )
-        else:
-            await whatsapp.send_text_message(
-                worker.phone_number,
-                f"¡Hola {nombre}! 👋 Aún no tenemos tu registro de hoy. Manda *presente* cuando llegues.",
             )
     except Exception as e:
         await _log(session, company_id, "checkin_reminder", worker_id=worker.id, error=e)
@@ -68,8 +97,11 @@ async def job_progress(session: AsyncSession, company_id: uuid.UUID, job: Job, w
     nombre = _first_name(worker.name)
     jid = str(job.id)
     payloads = [f"completado::{jid}", f"en_progreso::{jid}", f"atrasado::{jid}"]
+    in_window = await window_open(session, worker.id)
+    if not in_window and not settings.wa_template_job_progress:
+        raise NoWindow(worker.name)
     try:
-        if settings.wa_template_job_progress:
+        if not in_window:
             await whatsapp.send_template(
                 worker.phone_number, settings.wa_template_job_progress,
                 [nombre, job.title, _vence(job, today)], quick_reply_payloads=payloads,

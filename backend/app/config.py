@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     # Mensajes proactivos (plantillas de WhatsApp aprobadas por Meta).
     # Si el nombre de una plantilla está vacío, ese envío automático no corre.
     scheduler_enabled: bool = True
+    # Recordatorios automáticos a trabajadores (llegada 8:30, avance 15:00).
+    proactive_enabled: bool = True
     wa_template_lang: str = "es_MX"
     wa_template_checkin_reminder: str = ""
     wa_template_job_progress: str = ""

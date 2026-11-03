@@ -5,6 +5,10 @@ Envíos programados: el bot persigue a la gente para que el dueño no tenga que.
 - job_progress (15:00): tareas que vencen hoy o ya vencieron y no tienen foto de hoy.
 - daily_summary (18:00): resumen del día al WhatsApp del dueño.
 
+A los trabajadores se les escribe sin plantilla si su ventana de 24 h está
+abierta (ver notify.py); la plantilla solo hace falta para quien no ha
+escrito. El resumen al dueño siempre necesita plantilla.
+
 Cada envío corre una vez al día: `scheduled_runs` (kind, run_date) es el
 candado, así que reinicios o varias instancias no duplican mensajes. Si la app
 estuvo caída a la hora exacta, corre en cuanto vuelve, dentro de una ventana de
@@ -52,6 +56,8 @@ async def run_checkin_reminders(session: AsyncSession, company_id: uuid.UUID) ->
         try:
             await notify.checkin_reminder(session, company_id, w)
             sent += 1
+        except notify.NoWindow:
+            continue
         except Exception as e:
             logger.warning("checkin_reminder a %s falló: %s", w.name, e)
     await session.commit()
@@ -72,6 +78,8 @@ async def run_job_progress(session: AsyncSession, company_id: uuid.UUID) -> int:
         try:
             await notify.job_progress(session, company_id, j, workers[j.worker_id], s.today)
             sent += 1
+        except notify.NoWindow:
+            continue
         except Exception as e:
             logger.warning("job_progress de %s falló: %s", j.title, e)
     await session.commit()
@@ -97,24 +105,23 @@ async def run_daily_summary(session: AsyncSession, company_id: uuid.UUID) -> int
 Job = Callable[[AsyncSession, uuid.UUID], Awaitable[int]]
 
 
-def _jobs() -> list[tuple[str, str, str, Job, bool]]:
-    """(kind, hora, plantilla, función, corre en días de descanso)."""
+def _jobs() -> list[tuple[str, str, bool, Job]]:
+    """(kind, hora, ¿activo?, función)."""
     return [
-        ("checkin_reminder", settings.checkin_reminder_time, settings.wa_template_checkin_reminder,
-         run_checkin_reminders, False),
-        ("job_progress", settings.job_progress_time, settings.wa_template_job_progress,
-         run_job_progress, False),
-        ("daily_summary", settings.daily_summary_time, settings.wa_template_daily_summary,
-         run_daily_summary, False),
+        # A trabajadores: sin plantilla igual corre para quien tenga la ventana abierta.
+        ("checkin_reminder", settings.checkin_reminder_time, settings.proactive_enabled, run_checkin_reminders),
+        ("job_progress", settings.job_progress_time, settings.proactive_enabled, run_job_progress),
+        # Al dueño: él casi nunca le escribe al bot, así que sin plantilla no hay resumen.
+        ("daily_summary", settings.daily_summary_time, bool(settings.wa_template_daily_summary), run_daily_summary),
     ]
 
 
 def due_jobs(now: datetime) -> list[tuple[str, Job]]:
     out = []
-    for kind, hhmm, template, fn, on_rest_days in _jobs():
-        if not template:
-            continue  # sin plantilla aprobada no hay envío proactivo
-        if is_rest_day(now.date()) and not on_rest_days:
+    for kind, hhmm, enabled, fn in _jobs():
+        if not enabled:
+            continue
+        if is_rest_day(now.date()):
             continue
         target = datetime.combine(now.date(), parse_hhmm(hhmm), tzinfo=TZ)
         if target <= now <= target + CATCH_UP_WINDOW:

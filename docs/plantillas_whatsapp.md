@@ -5,8 +5,13 @@ Los mensajes que el bot manda **sin que el trabajador haya escrito primero**
 ser plantillas aprobadas por Meta. Sin plantilla, ese envío automático
 simplemente no corre: el resto de Capataz funciona igual.
 
-Costo (México, oct 2026): ~$0.0085 USD por mensaje de utilidad. Para 20
-trabajadores con recordatorio diario son ~$4–5 USD al mes.
+Costo (México, oct 2026): ~$0.0085 USD por mensaje de utilidad; marketing
+cuesta ~5 veces más. Si Meta reclasifica una plantilla como marketing, **no la
+uses**: créala de nuevo con otro nombre y otra redacción.
+
+A los trabajadores, Capataz primero intenta sin plantilla: si escribieron en las
+últimas 24 h, el mensaje cae en la ventana de servicio (1,000 gratis al mes por
+número). Las plantillas 1 y 2 solo se usan con quien no ha escrito.
 
 ## Cómo darlas de alta
 
@@ -30,7 +35,7 @@ enviar, así sabe qué tarea contestó el trabajador.
 
 **Cuerpo:**
 ```
-Hola {{1}}, todavía no tenemos tu registro de hoy. Cuando llegues, aprieta *Ya llegué* o manda "presente".
+Hola {{1}}, no hay registro de tu llegada de hoy. Indica tu asistencia con uno de los botones o envía "presente" al llegar.
 ```
 Ejemplo de {{1}}: `Luis`
 
@@ -40,24 +45,36 @@ Ejemplo de {{1}}: `Luis`
 
 ---
 
-### 2. ¿Cómo va la tarea?
+### 2. Estado de tarea asignada
 
-- **Nombre:** `capataz_avance_tarea`
+> La primera versión (`capataz_avance_tarea`, "¿cómo va…?") Meta la reclasificó
+> como **marketing**. Bórrala o ignórala y crea esta con **otro nombre**.
+
+- **Nombre:** `capataz_estado_tarea`
 - **Variable en Railway:** `WA_TEMPLATE_JOB_PROGRESS`
 - **Hora:** `JOB_PROGRESS_TIME` (default 15:00), para tareas que vencen hoy o ya
-  vencieron y no tienen foto de hoy. También lo usa el botón "Que el bot
+  vencieron y no tienen foto de hoy. También la usa el botón "Que el bot
   pregunte" del tablero.
+- **Casi nunca se usa:** si el trabajador escribió en las últimas 24 h (mandó
+  "presente" en la mañana), el bot le pregunta con un mensaje normal, sin
+  plantilla. Esta es el respaldo para quien no ha escrito.
 
 **Cuerpo:**
 ```
-Hola {{1}}, ¿cómo va *{{2}}*? Vence: {{3}}. Si ya terminaste, aprieta el botón y manda una foto de cómo quedó.
+Hola {{1}}, se requiere el estado de la tarea asignada "{{2}}", con fecha de entrega {{3}}. Indica el estado con uno de los botones. Si ya está terminada, envía una foto como evidencia.
 ```
 Ejemplos: `Luis` · `Colado de losa 2º piso` · `hoy`
 
 **Botones (respuesta rápida):**
-1. `Ya terminé`
-2. `Sigo en eso`
+1. `Terminada`
+2. `En proceso`
 3. `Tengo un problema`
+
+Por qué así: Meta clasifica como utilidad lo que se refiere a algo concreto que
+ya existe entre la empresa y la persona (una tarea asignada con fecha), con
+tono de aviso. Lo que suena a "¿qué tal?", a invitación o a seguimiento para
+platicar lo manda a marketing. Sin emojis, sin signos de exclamación, sin
+preguntas abiertas.
 
 ---
 

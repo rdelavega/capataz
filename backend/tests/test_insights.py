@@ -134,3 +134,68 @@ def test_scheduler_solo_con_plantilla_y_en_su_ventana(monkeypatch) -> None:
     assert [k for k, _ in scheduler.due_jobs(at_830)] == ["checkin_reminder"]
     assert scheduler.due_jobs(datetime(2026, 11, 2, 11, 0, tzinfo=TZ)) == []      # pasó la ventana
     assert scheduler.due_jobs(datetime(2026, 11, 1, 8, 31, tzinfo=TZ)) == []       # domingo
+
+
+# ─── Ventana de 24 h: sin plantilla si el trabajador ya escribió ─────────────
+
+import asyncio  # noqa: E402
+from unittest.mock import AsyncMock  # noqa: E402
+
+import pytest  # noqa: E402
+
+
+class _Session:
+    def __init__(self):
+        self.added = []
+
+    def add(self, o):
+        self.added.append(o)
+
+    async def flush(self):
+        pass
+
+
+def _wa(monkeypatch):
+    sent = {"template": AsyncMock(), "buttons": AsyncMock()}
+    monkeypatch.setattr(notify.whatsapp, "send_template", sent["template"])
+    monkeypatch.setattr(notify.whatsapp, "send_interactive_buttons", sent["buttons"])
+    return sent
+
+
+def test_job_progress_usa_botones_si_la_ventana_esta_abierta(monkeypatch) -> None:
+    sent = _wa(monkeypatch)
+    monkeypatch.setattr(notify, "window_open", AsyncMock(return_value=True))
+    monkeypatch.setattr(notify.settings, "wa_template_job_progress", "capataz_estado_tarea")
+    w = _worker("Luis Pech")
+    asyncio.run(notify.job_progress(_Session(), uuid.uuid4(), _job("Losa", w, "en_progreso", TODAY), w, TODAY))
+    sent["buttons"].assert_awaited_once()
+    sent["template"].assert_not_awaited()
+
+
+def test_job_progress_usa_plantilla_si_no_ha_escrito(monkeypatch) -> None:
+    sent = _wa(monkeypatch)
+    monkeypatch.setattr(notify, "window_open", AsyncMock(return_value=False))
+    monkeypatch.setattr(notify.settings, "wa_template_job_progress", "capataz_estado_tarea")
+    w = _worker("Luis Pech")
+    asyncio.run(notify.job_progress(_Session(), uuid.uuid4(), _job("Losa", w, "en_progreso", TODAY), w, TODAY))
+    sent["template"].assert_awaited_once()
+
+
+def test_sin_ventana_ni_plantilla_no_manda_nada(monkeypatch) -> None:
+    sent = _wa(monkeypatch)
+    monkeypatch.setattr(notify, "window_open", AsyncMock(return_value=False))
+    monkeypatch.setattr(notify.settings, "wa_template_checkin_reminder", "")
+    session = _Session()
+    with pytest.raises(notify.NoWindow):
+        asyncio.run(notify.checkin_reminder(session, uuid.uuid4(), _worker("Luis Pech")))
+    assert not session.added
+    sent["template"].assert_not_awaited()
+    sent["buttons"].assert_not_awaited()
+
+
+def test_scheduler_resumen_solo_con_plantilla(monkeypatch) -> None:
+    monkeypatch.setattr(scheduler.settings, "wa_template_daily_summary", "")
+    at_6pm = datetime(2026, 11, 2, 18, 1, tzinfo=TZ)
+    assert scheduler.due_jobs(at_6pm) == []
+    monkeypatch.setattr(scheduler.settings, "wa_template_daily_summary", "capataz_resumen_diario")
+    assert [k for k, _ in scheduler.due_jobs(at_6pm)] == ["daily_summary"]
