@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capataz · Sepa qué pasa con su equipo en campo</title>
+<meta name="description" content="Capataz organiza los mensajes de WhatsApp de su equipo en campo: asistencia, fotos de avance y tareas, en un panel claro para el dueño. Sin apps para el trabajador.">
+<link rel="icon" type="image/png" href="/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --kraft: #F2EDE4; --kraft-dim: #E5DFD3; --paper: #FFF8F3; --ink: #2A2622; --ink-2: #3A342E;
+  --muted: #58423B; --faint: #7A6158; --line: #E0C0B6;
+  --orange: #D85A30; --orange-dark: #A5360D; --green: #4F7D1A; --amber: #A9690F; --red: #A32D2D; --wa: #1F7A4A;
+  --display: "Oswald", "Arial Narrow", sans-serif; --body: "Archivo", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--kraft); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-family: var(--display); text-transform: uppercase; margin: 0; line-height: 1.08; text-wrap: balance; letter-spacing: .01em; }
+p { margin: 0; }
+a { color: inherit; }
+:focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+.label { font-family: var(--mono); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.btn { display: inline-flex; align-items: center; gap: 8px; border: 2px solid var(--ink); padding: 12px 20px; font-family: var(--mono); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; text-decoration: none; box-shadow: 4px 4px 0 var(--ink); transition: transform 80ms, box-shadow 80ms; background: var(--paper); color: var(--ink); }
+.btn:hover { transform: translate(-1px,-1px); box-shadow: 5px 5px 0 var(--ink); }
+.btn:active { transform: translate(3px,3px); box-shadow: none; }
+.btn.pri { background: var(--orange); color: #fff; }
+
+/* Barra */
+.top { background: var(--ink); color: var(--paper); border-bottom: 4px solid var(--orange); }
+.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 14px; padding-bottom: 14px; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.brand img { width: 34px; height: 34px; border: 2px solid var(--paper); }
+.brand span { font-family: var(--display); font-weight: 700; font-size: 24px; letter-spacing: .04em; color: var(--orange); }
+.top nav { display: flex; gap: 22px; align-items: center; }
+.top nav a { font-family: var(--mono); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; text-decoration: none; color: #D9CCBF; }
+.top nav a:hover { color: #fff; }
+.top nav .btn { padding: 8px 14px; font-size: 12px; box-shadow: 3px 3px 0 #000; border-color: var(--paper); }
+
+/* Hero */
+.hero { padding: 64px 0 56px; }
+.hero .wrap { display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: center; }
+.hero .label { color: var(--orange-dark); }
+.hero h1 { font-size: clamp(38px, 5.4vw, 64px); margin: 12px 0 18px; }
+.hero h1 em { font-style: normal; color: var(--orange); }
+.hero p.lead { font-size: 20px; max-width: 34ch; color: var(--muted); }
+.hero .cta { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 28px; }
+.hero .note { margin-top: 16px; font-family: var(--mono); font-size: 13px; color: var(--faint); }
+
+/* Maqueta: chat + panel */
+.mock { position: relative; min-height: 500px; }
+.phone { position: absolute; left: 0; top: 0; width: 270px; border: 3px solid var(--ink); background: #ECE5DD; box-shadow: 6px 6px 0 var(--ink); z-index: 2; }
+.phone-top { background: #075E54; color: #fff; padding: 9px 12px; font-size: 13px; font-weight: 600; }
+.phone-top small { display: block; font-weight: 400; opacity: .8; font-size: 11px; }
+.chat { padding: 12px 10px; display: grid; gap: 7px; }
+.b { background: #fff; padding: 7px 9px 5px; font-size: 13px; line-height: 1.4; max-width: 92%; border-radius: 0 8px 8px 8px; box-shadow: 0 1px 0 rgba(0,0,0,.12); }
+.b.me { justify-self: end; background: #DCF8C6; border-radius: 8px 0 8px 8px; }
+.b .ts { display: block; text-align: right; font-size: 10px; color: #8a8a8a; }
+.b .ph { height: 74px; margin: 2px 0 4px; background: repeating-linear-gradient(115deg, rgba(0,0,0,.06) 0 6px, transparent 6px 14px), linear-gradient(160deg, #B9AE9E, #6E675E); }
+.panel { position: absolute; right: 0; top: 250px; width: 340px; z-index: 3; border: 2px solid var(--ink); background: var(--paper); box-shadow: 6px 6px 0 var(--ink); }
+.panel h3 { background: var(--ink); color: #fff; font-size: 15px; padding: 10px 14px; display: flex; justify-content: space-between; }
+.panel h3 span { font-family: var(--mono); font-size: 11px; color: #F4C6B4; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.row { display: grid; grid-template-columns: 6px 1fr; border-bottom: 2px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.row i { display: block; }
+.row div { padding: 9px 12px; font-size: 13.5px; }
+.row b { display: block; font-weight: 600; line-height: 1.3; }
+.row small { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+
+/* Secciones */
+section.band { padding: 64px 0; }
+section.band.dark { background: var(--ink); color: var(--paper); }
+section.band.paper { background: var(--paper); border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink); }
+.head { max-width: 62ch; margin-bottom: 32px; }
+.head .label { color: var(--orange); }
+.head h2 { font-size: clamp(28px, 3.6vw, 40px); margin-top: 8px; }
+.head p { margin-top: 12px; color: var(--muted); }
+.dark .head p { color: #D9CCBF; }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; counter-reset: step; }
+.step { border: 2px solid var(--ink); background: var(--paper); padding: 22px 22px 24px; box-shadow: 4px 4px 0 var(--ink); }
+.step .n { font-family: var(--display); font-size: 44px; font-weight: 700; color: var(--orange); line-height: 1; }
+.step h3 { font-size: 21px; margin: 10px 0 8px; }
+.step p { font-size: 15.5px; color: var(--muted); }
+.feats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; border: 2px solid var(--paper); }
+.feat { padding: 24px; border-right: 2px solid #4A423B; border-bottom: 2px solid #4A423B; }
+.feat:nth-child(2n) { border-right: 0; }
+.feat:nth-last-child(-n+2) { border-bottom: 0; }
+.feat h3 { font-size: 20px; color: #fff; margin-bottom: 6px; }
+.feat h3::before { content: ""; display: inline-block; width: 10px; height: 10px; background: var(--orange); margin-right: 10px; vertical-align: middle; }
+.feat p { color: #D9CCBF; font-size: 15.5px; }
+.who { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.who div { border: 2px solid var(--ink); border-left: 8px solid var(--orange); background: var(--kraft); padding: 16px 18px; }
+.who b { font-family: var(--display); text-transform: uppercase; font-size: 19px; font-weight: 600; display: block; }
+.who span { font-size: 14.5px; color: var(--muted); }
+.cta-band { display: grid; grid-template-columns: 1.3fr 1fr; gap: 32px; align-items: center; }
+.cta-band h2 { font-size: clamp(28px, 3.6vw, 42px); }
+.cta-band p { margin-top: 12px; color: var(--muted); max-width: 52ch; }
+.contact { border: 2px solid var(--ink); background: var(--paper); padding: 22px; box-shadow: 6px 6px 0 var(--ink); display: grid; gap: 14px; }
+.contact .label { color: var(--faint); }
+.contact a.mail { font-family: var(--mono); font-size: 16px; font-weight: 700; word-break: break-all; }
+
+footer { background: var(--ink); color: #A8988C; padding: 28px 0; font-size: 14px; }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+footer a { color: #D9CCBF; }
+
+@media (max-width: 900px) {
+  .hero .wrap, .cta-band { grid-template-columns: 1fr; }
+  .mock { min-height: 0; display: grid; gap: 20px; }
+  .phone, .panel { position: static; width: auto; max-width: 380px; }
+  .steps { grid-template-columns: 1fr; }
+  .feats { grid-template-columns: 1fr; }
+  .feat { border-right: 0 !important; border-bottom: 2px solid #4A423B !important; }
+  .feat:last-child { border-bottom: 0 !important; }
+  .who { grid-template-columns: repeat(2, 1fr); }
+  .top nav a:not(.btn) { display: none; }
+}
+@media (max-width: 520px) {
+  .wrap { padding: 0 16px; }
+  .who { grid-template-columns: 1fr; }
+  .hero { padding-top: 40px; }
+}
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:hover, .btn:active { transform: none; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="Capataz, inicio"><img src="/logo.png" alt=""><span>CAPATAZ</span></a>
+    <nav aria-label="Principal">
+      <a href="#como-funciona">Cómo funciona</a>
+      <a href="#para-quien">Para quién</a>
+      <a href="/privacidad">Privacidad</a>
+      <a class="btn pri" href="#contacto">Pide una demo</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <span class="label">Para PyMEs con gente en campo</span>
+        <h1>Deje de <em>perseguir</em> a su equipo para saber cómo va el trabajo</h1>
+        <p class="lead">Sus trabajadores mandan "presente", fotos y audios por WhatsApp, como siempre. Capataz lo ordena y usted ve en un solo panel quién llegó, qué se terminó y qué se atoró.</p>
+        <div class="cta">
+          <a class="btn pri" href="#contacto">Pide una demo</a>
+          <a class="btn" href="#como-funciona">Cómo funciona</a>
+        </div>
+        <p class="note">Sin apps ni capacitación para el trabajador.</p>
+      </div>
+
+      <div class="mock" aria-hidden="true">
+        <div class="phone">
+          <div class="phone-top">Capataz<small>cuenta de empresa</small></div>
+          <div class="chat">
+            <div class="b me">Presente<span class="ts">7:42 a.m. ✓✓</span></div>
+            <div class="b">✅ ¡Presente! Buenos días, Luis. Tu registro quedó guardado.<span class="ts">7:42 a.m.</span></div>
+            <div class="b me"><div class="ph"></div>Ya quedó la losa<span class="ts">10:15 a.m. ✓✓</span></div>
+            <div class="b">📸 Foto recibida para <b>Colado de losa 2º piso</b>. Ya le avisé a tu jefe.<span class="ts">10:15 a.m.</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Necesita tu atención <span>3 pendientes</span></h3>
+          <div class="row"><i style="background:var(--red)"></i><div><b>Pedro May no ha llegado</b><small>Obra Altabrisa · el bot le preguntó 8:30</small></div></div>
+          <div class="row"><i style="background:var(--orange)"></i><div><b>Colado de losa 2º piso espera tu visto bueno</b><small>Luis Pech · con foto · 10:15</small></div></div>
+          <div class="row"><i style="background:var(--amber)"></i><div><b>Jorge Canul llegó tarde 3 veces esta semana</b><small>Llega en promedio 8:24</small></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band paper" id="como-funciona">
+    <div class="wrap">
+      <div class="head">
+        <span class="label">Cómo funciona</span>
+        <h2>El trabajador escribe por WhatsApp. Usted ve todo en orden.</h2>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="n">1</div>
+          <h3>Su equipo manda WhatsApp</h3>
+          <p>"Presente" al llegar, fotos del avance, audios. Al número de su empresa, desde el WhatsApp que ya usan.</p>
+        </div>
+        <div class="step">
+          <div class="n">2</div>
+          <h3>Capataz lo organiza</h3>
+          <p>Registra la asistencia, liga cada foto a su tarea y transcribe los audios. Si alguien no llega o una tarea se atrasa, el bot le pregunta.</p>
+        </div>
+        <div class="step">
+          <div class="n">3</div>
+          <h3>Usted solo atiende lo importante</h3>
+          <p>Un panel con lo que necesita su atención y un resumen diario en su WhatsApp. Aprueba trabajos con la foto en la mano.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band dark">
+    <div class="wrap">
+      <div class="head">
+        <span class="label">Qué resuelve</span>
+        <h2>Quién hizo qué, con prueba</h2>
+        <p>Lo que hoy averigua con llamadas y mensajes sueltos, en un solo lugar.</p>
+      </div>
+      <div class="feats">
+        <div class="feat"><h3>Pase de lista</h3><p>Quién llegó, a qué hora y quién falta, por obra o sucursal. Con su historial del mes.</p></div>
+        <div class="feat"><h3>Evidencia de avance</h3><p>Una tarea solo se cierra con foto y con su visto bueno. Sin "dice que ya quedó".</p></div>
+        <div class="feat"><h3>El bot pregunta por usted</h3><p>Recordatorios de llegada y de tareas por vencer, automáticos. Usted solo interviene si nadie contesta.</p></div>
+        <div class="feat"><h3>Resumen diario</h3><p>A la hora que usted elija, un mensaje con cómo cerró el día: asistencia, tareas terminadas y atrasos.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="para-quien">
+    <div class="wrap">
+      <div class="head">
+        <span class="label">Para quién</span>
+        <h2>Empresas con gente trabajando fuera de la oficina</h2>
+      </div>
+      <div class="who">
+        <div><b>Constructoras</b><span>Obras, cuadrillas, residentes</span></div>
+        <div><b>Talleres</b><span>Mecánicos, hojalatería, servicio</span></div>
+        <div><b>Distribuidoras</b><span>Rutas, repartidores, cobranza</span></div>
+        <div><b>Servicios de campo</b><span>Mantenimiento, limpieza, instalación</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band paper" id="contacto">
+    <div class="wrap cta-band">
+      <div>
+        <h2>Véalo funcionando con su propio equipo</h2>
+        <p>Le mostramos Capataz en 20 minutos con un ejemplo de su giro. Si le sirve, lo dejamos listo con su gente el mismo día.</p>
+      </div>
+      <div class="contact">
+        <span class="label">Escríbanos</span>
+        <a class="mail" href="mailto:rdlvg711@gmail.com?subject=Demo%20de%20Capataz">rdlvg711@gmail.com</a>
+        <a class="btn pri" href="mailto:rdlvg711@gmail.com?subject=Demo%20de%20Capataz">Pedir una demo</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Capataz · Mérida, Yucatán, México</span>
+    <span><a href="/privacidad">Política de privacidad</a> · <a href="mailto:rdlvg711@gmail.com">rdlvg711@gmail.com</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
