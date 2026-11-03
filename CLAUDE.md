@@ -168,7 +168,7 @@ Demos: `python seed_demo.py --giro {construccion,taller,distribuidora,servicios}
 ## Próximos pasos
 
 1. **Botón "Recordar"**: falla si el trabajador no escribió en las últimas
-   24 h (error 131047 de Meta). Opción elegida: abrir `wa.me` desde el
+   24 h (error 131047 de Meta). Siguiente a revisar: abrir `wa.me` desde el
    celular del dueño en lugar de enviar por la API.
 2. Foto o ubicación cuentan como check-in (evidencia de presencia).
 3. Ligar fotos a tareas (evidencia de avance, feature #4).
