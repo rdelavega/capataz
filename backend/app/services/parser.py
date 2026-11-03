@@ -1,10 +1,11 @@
 """
 Procesa un evento ya insertado en DB: identifica al worker, clasifica el tipo
-de mensaje y dispara acciones secundarias (attendance, media, transcripción).
+de mensaje y dispara acciones secundarias (attendance, media, transcripción,
+tareas).
 """
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -16,7 +17,7 @@ from app.models.job import Job
 from app.models.worker import Worker
 from app.phone import phone_variants
 from app.services import storage, transcription, whatsapp
-from app.timeutil import greeting, local_today
+from app.timeutil import greeting, is_late, local_today
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,15 @@ CHECKIN_KEYWORDS = {
     "presente", "buenos días", "buen día", "buenos dias", "buen dia",
     "ya llegué", "ya llegue", "checkin", "check in",
 }
+
+# Botones que mandan los mensajes del bot: "<estado>::<job_id>" o una acción simple.
+JOB_BUTTON_STATUSES = {"completado", "en_progreso", "atrasado"}
+BUTTON_CHECKIN = "checkin"
+BUTTON_ABSENT = "ausente"
+
+# Una foto que llega dentro de esta ventana después de "Terminé" es la evidencia de esa tarea.
+REVIEW_PHOTO_WINDOW = timedelta(hours=6)
+OPEN_STATUSES = ("pendiente", "en_progreso", "atrasado")
 
 
 def _is_checkin(text: str) -> bool:
@@ -43,6 +53,17 @@ def _extract_message(raw: dict, wa_msg_id: str) -> dict | None:
             for msg in change.get("value", {}).get("messages", []):
                 if msg.get("id") == wa_msg_id:
                     return msg
+    return None
+
+
+def _button_payload(msg: dict) -> str | None:
+    """Payload de un botón: interactive (mensaje libre) o button (plantilla)."""
+    if msg.get("type") == "interactive":
+        interactive = msg.get("interactive", {})
+        if interactive.get("type") == "button_reply":
+            return interactive.get("button_reply", {}).get("id")
+    if msg.get("type") == "button":
+        return msg.get("button", {}).get("payload")
     return None
 
 
@@ -65,6 +86,72 @@ async def _safe_send(event_id: uuid.UUID, phone_number: str, body: str) -> None:
         await whatsapp.send_text_message(phone_number, body)
     except Exception as e:
         logger.error("event %s: failed to send reply: %s", event_id, e)
+
+
+async def _handle_job_button(session, worker: Worker, nombre: str, payload: str) -> str | None:
+    """Actualiza la tarea según el botón. Devuelve la respuesta para el trabajador."""
+    status, _, job_id_str = payload.partition("::")
+    if status not in JOB_BUTTON_STATUSES:
+        return None
+    try:
+        job_uuid = uuid.UUID(job_id_str)
+    except ValueError:
+        logger.warning("invalid job_id in button payload: %s", payload)
+        return None
+
+    job = (await session.execute(
+        select(Job).where(Job.id == job_uuid, Job.worker_id == worker.id)
+    )).scalar_one_or_none()
+    if job is None:
+        logger.warning("job %s not found for worker %s", job_id_str, worker.id)
+        return None
+
+    if job.status == "completado":
+        return f"👍 *{job.title}* ya estaba aprobada, {nombre}. ¡Gracias!"
+
+    if status == "completado":
+        # "Terminé" no cierra la tarea: queda por revisar hasta que el dueño ve la foto.
+        job.status = "por_revisar"
+        job.completed_at = datetime.now(tz=timezone.utc)
+        job.review_note = None
+        return (
+            f"✅ Anotado, {nombre}. Mándame una *foto de cómo quedó* "
+            f"*{job.title}* para que tu jefe la apruebe."
+        )
+    if status == "en_progreso":
+        job.status = "en_progreso"
+        return f"🔄 Entendido, {nombre}. Cuando avances, manda foto."
+    job.status = "atrasado"
+    return f"🚫 Anotado, {nombre}. Ya le avisé a tu jefe que tienes un problema con *{job.title}*."
+
+
+async def _link_photo_to_job(session, worker: Worker, now: datetime) -> Job | None:
+    """
+    Decide a qué tarea pertenece una foto:
+    1. La tarea que el trabajador acaba de marcar como terminada (por_revisar reciente).
+    2. Si solo tiene una tarea abierta, esa (evidencia de avance).
+    """
+    jobs = (await session.execute(
+        select(Job).where(
+            Job.worker_id == worker.id,
+            Job.status.in_(("por_revisar", *OPEN_STATUSES)),
+        )
+    )).scalars().all()
+
+    in_review = [
+        j for j in jobs
+        if j.status == "por_revisar" and j.completed_at and now - j.completed_at <= REVIEW_PHOTO_WINDOW
+    ]
+    if in_review:
+        return max(in_review, key=lambda j: j.completed_at)
+
+    open_jobs = [j for j in jobs if j.status in OPEN_STATUSES]
+    if len(open_jobs) == 1:
+        job = open_jobs[0]
+        if job.status == "pendiente":
+            job.status = "en_progreso"
+        return job
+    return None
 
 
 async def process_event(event_id: uuid.UUID) -> None:
@@ -102,6 +189,7 @@ async def _process(event_id: uuid.UUID, session) -> None:
         return
 
     nombre = worker.name.split()[0]
+    now = datetime.now(tz=timezone.utc)
 
     # Clasificar tipo de mensaje
     msg_type = msg.get("type", "unknown")
@@ -111,7 +199,9 @@ async def _process(event_id: uuid.UUID, session) -> None:
     latitude: float | None = None
     longitude: float | None = None
     transcription_text: str | None = None
+    reply: str | None = None
     already_replied = False
+    marked_absent = False
 
     if msg_type == "text":
         text_content = msg.get("text", {}).get("body", "")
@@ -151,37 +241,21 @@ async def _process(event_id: uuid.UUID, session) -> None:
                 event_type = "checkin"
                 text_content = transcription_text
 
-    elif msg_type == "interactive":
-        interactive = msg.get("interactive", {})
-        if interactive.get("type") == "button_reply":
-            button_id = interactive.get("button_reply", {}).get("id", "")
-            parts = button_id.split("::")
-            if len(parts) == 2:
-                status, job_id_str = parts
-                if status in {"pendiente", "en_progreso", "completado", "atrasado"}:
-                    try:
-                        job_uuid = uuid.UUID(job_id_str)
-                        job_result = await session.execute(
-                            select(Job).where(
-                                Job.id == job_uuid,
-                                Job.worker_id == worker.id,
-                            )
-                        )
-                        job = job_result.scalar_one_or_none()
-                        if job:
-                            job.status = status
-                            REPLY = {
-                                "completado":  f"✅ Tarea marcada como terminada. ¡Buen trabajo, {nombre}!",
-                                "en_progreso": f"🔄 Entendido, {nombre}. Sigue adelante.",
-                                "atrasado":    f"🚫 Anotado, {nombre}. El jefe ya sabe.",
-                            }
-                            await _safe_send(event_id, phone_number, REPLY[status])
-                            already_replied = True
-                        else:
-                            logger.warning("event %s: job %s not found for worker %s", event_id, job_id_str, worker.id)
-                    except ValueError:
-                        logger.warning("event %s: invalid job_id in button_id: %s", event_id, button_id)
+    elif msg_type in ("interactive", "button"):
+        payload = _button_payload(msg) or ""
+        text_content = msg.get("button", {}).get("text") or msg.get("interactive", {}).get(
+            "button_reply", {}).get("title")
         event_type = "text"
+        if payload == BUTTON_CHECKIN:
+            event_type = "checkin"
+        elif payload == BUTTON_ABSENT:
+            marked_absent = True
+        else:
+            job_reply = await _handle_job_button(session, worker, nombre, payload)
+            if job_reply:
+                event.job_id = uuid.UUID(payload.partition("::")[2])
+                reply = job_reply
+                already_replied = True
 
     elif msg_type == "location":
         event_type = "location"
@@ -207,25 +281,49 @@ async def _process(event_id: uuid.UUID, session) -> None:
     )
     attendance = existing.scalar_one_or_none()
 
-    reply: str | None = None
-    # Check-in → upsert en attendance_daily + respuesta al trabajador
     if event_type == "checkin":
+        # Check-in → upsert en attendance_daily + respuesta al trabajador
+        status = "tarde" if is_late(now) else "presente"
         if attendance is None:
             attendance = AttendanceDaily(
                 company_id=company_id,
                 worker_id=worker.id,
                 work_date=today,
-                status="presente",
-                checkin_at=datetime.now(tz=timezone.utc),
+                status=status,
+                checkin_at=now,
                 event_id=event.id,
             )
             session.add(attendance)
             reply = f"✅ ¡Presente! {greeting()}, {nombre}. Tu registro quedó guardado."
         else:
             if attendance.status == "ausente":
-                attendance.status = "presente"
-            attendance.checkin_at = attendance.checkin_at or datetime.now(tz=timezone.utc)
+                attendance.status = status
+            attendance.checkin_at = attendance.checkin_at or now
             reply = f"👍 Ya tenías registro de hoy, {nombre}. ¡Que te vaya bien!"
+
+    elif marked_absent:
+        if attendance is None:
+            session.add(AttendanceDaily(
+                company_id=company_id, worker_id=worker.id, work_date=today,
+                status="ausente", checkin_at=None, event_id=event.id,
+            ))
+            reply = f"Anotado, {nombre}. Le aviso a tu jefe que hoy no vas."
+        else:
+            reply = f"👍 Ya tenías registro de hoy, {nombre}."
+
+    elif event_type == "photo":
+        job = await _link_photo_to_job(session, worker, now)
+        if job is not None:
+            event.job_id = job.id
+            if job.status == "por_revisar":
+                reply = f"📸 Foto recibida para *{job.title}*. Ya le avisé a tu jefe para que la apruebe."
+            else:
+                reply = f"📸 Foto de avance guardada en *{job.title}*. Gracias, {nombre}."
+            if attendance is None:
+                reply += " Si ya llegaste, manda *presente*."
+        else:
+            reply = _ack_reply(event_type, nombre, has_checkin=attendance is not None)
+
     elif not already_replied:
         reply = _ack_reply(event_type, nombre, has_checkin=attendance is not None)
 

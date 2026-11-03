@@ -5,7 +5,8 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ─── ENUMS ────────────────────────────────────────────────────────────────────
 
-CREATE TYPE job_status AS ENUM ('pendiente', 'en_progreso', 'completado', 'atrasado');
+-- por_revisar: el trabajador dijo "terminé"; espera foto y visto bueno del dueño.
+CREATE TYPE job_status AS ENUM ('pendiente', 'en_progreso', 'por_revisar', 'completado', 'atrasado');
 CREATE TYPE event_type AS ENUM ('checkin', 'photo', 'audio', 'location', 'text', 'unknown');
 CREATE TYPE attendance_status AS ENUM ('presente', 'ausente', 'tarde');
 
@@ -35,6 +36,7 @@ CREATE TABLE workers (
     branch_id    UUID REFERENCES branches(id) ON DELETE SET NULL,
     name         TEXT NOT NULL,
     phone_number TEXT NOT NULL,           -- E.164, e.g. +5215512345678
+    title        TEXT,                    -- puesto (Albañil, Electricista…)
     active       BOOLEAN NOT NULL DEFAULT TRUE,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (company_id, phone_number)
@@ -51,6 +53,9 @@ CREATE TABLE jobs (
     description  TEXT,
     status       job_status NOT NULL DEFAULT 'pendiente',
     due_date     DATE,
+    completed_at TIMESTAMPTZ,          -- cuándo dijo "terminé"
+    approved_at  TIMESTAMPTZ,          -- cuándo el dueño aprobó
+    review_note  TEXT,                 -- por qué se regresó
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -77,6 +82,7 @@ CREATE INDEX events_worker_id_idx    ON events(worker_id);
 CREATE INDEX events_company_id_idx   ON events(company_id);
 CREATE INDEX events_received_at_idx  ON events(received_at DESC);
 CREATE INDEX events_event_type_idx   ON events(event_type);
+CREATE INDEX idx_events_job          ON events(job_id);
 
 -- ─── ATTENDANCE DAILY (derivado de events, para queries rápidas) ──────────────
 
@@ -100,7 +106,32 @@ CREATE TABLE users (
     company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     email       TEXT NOT NULL UNIQUE,
     name        TEXT NOT NULL,
+    password_hash TEXT,
+    phone_number  TEXT,               -- WhatsApp del dueño (resumen diario)
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ─── notifications: mensajes que el bot manda por iniciativa propia ──────────
+
+CREATE TABLE notifications (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    kind        TEXT NOT NULL,        -- checkin_reminder | job_progress | daily_summary
+    worker_id   UUID REFERENCES workers(id) ON DELETE CASCADE,
+    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
+    job_id      UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    ok          BOOLEAN NOT NULL DEFAULT TRUE,
+    error       TEXT,
+    sent_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_notifications_sent ON notifications (company_id, sent_at DESC);
+
+-- Candado: cada envío programado corre una vez por día aunque haya reinicios.
+CREATE TABLE scheduled_runs (
+    kind      TEXT NOT NULL,
+    run_date  DATE NOT NULL,
+    ran_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (kind, run_date)
 );
 
 -- ─── updated_at trigger ───────────────────────────────────────────────────────

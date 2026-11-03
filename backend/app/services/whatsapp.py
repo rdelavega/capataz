@@ -1,3 +1,5 @@
+import re
+
 import httpx
 
 from app.config import settings
@@ -62,5 +64,59 @@ async def send_text_message(to: str, body: str) -> None:
             f"{GRAPH_API_BASE}/{settings.whatsapp_phone_number_id}/messages",
             headers=headers,
             json=payload,
+        )
+        resp.raise_for_status()
+
+
+def _clean_param(value: str) -> str:
+    """Meta rechaza parámetros con saltos de línea, tabs o 4+ espacios seguidos."""
+    return re.sub(r"\s+", " ", value).strip() or "-"
+
+
+def build_template_payload(
+    to: str,
+    name: str,
+    params: list[str],
+    quick_reply_payloads: list[str] | None = None,
+) -> dict:
+    components: list[dict] = [{
+        "type": "body",
+        "parameters": [{"type": "text", "text": _clean_param(p)} for p in params],
+    }]
+    for i, payload in enumerate(quick_reply_payloads or []):
+        components.append({
+            "type": "button",
+            "sub_type": "quick_reply",
+            "index": str(i),
+            "parameters": [{"type": "payload", "payload": payload}],
+        })
+    return {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": name,
+            "language": {"code": settings.wa_template_lang},
+            "components": components,
+        },
+    }
+
+
+async def send_template(
+    to: str,
+    name: str,
+    params: list[str],
+    quick_reply_payloads: list[str] | None = None,
+) -> None:
+    """Envía una plantilla aprobada. Funciona fuera de la ventana de 24 h (se cobra como utilidad)."""
+    headers = {
+        "Authorization": f"Bearer {settings.whatsapp_token}",
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{GRAPH_API_BASE}/{settings.whatsapp_phone_number_id}/messages",
+            headers=headers,
+            json=build_template_payload(to, name, params, quick_reply_payloads),
         )
         resp.raise_for_status()

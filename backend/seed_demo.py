@@ -2,8 +2,10 @@
 Arma un día de trabajo creíble para una demo, según el giro del prospecto.
 
 El tablero cuenta una historia: una sucursal en rojo (tarea atrasada), otra en
-amarillo (alguien no ha llegado), uno que llegó tarde, fotos con avance y un
-audio transcrito. Si pasas --mi-numero, ese trabajador es el que falta: mandas
+amarillo (alguien no ha llegado), uno que llega tarde seguido, una tarea
+terminada esperando visto bueno con su foto, fotos con avance y un audio
+transcrito. Además arma 30 días de historial (asistencia y tareas cerradas con
+foto) para que las métricas, el calendario y la ficha no salgan vacíos. Si pasas --mi-numero, ese trabajador es el que falta: mandas
 "presente" en vivo durante la demo y el tablero cambia frente al cliente.
 
 BORRA sucursales, trabajadores, tareas y eventos de la empresa configurada en
@@ -24,10 +26,10 @@ from sqlalchemy import delete
 
 from app.config import settings
 from app.db import AsyncSessionLocal, engine
-from app.models import AttendanceDaily, Branch, Company, Event, Job, Worker
+from app.models import AttendanceDaily, Branch, Company, Event, Job, Notification, Worker
 from app.phone import normalize_phone
 from app.services import storage
-from app.timeutil import TZ, local_now, local_today
+from app.timeutil import TZ, is_rest_day, local_now, local_today
 
 # Cada giro: 2 sucursales, 8 trabajadores (nombre, puesto, índice de sucursal),
 # tareas (título, índice de trabajador, estado, días para entrega),
@@ -48,7 +50,7 @@ GIROS: dict[str, dict] = {
         "jobs": [
             ("Colado de losa nivel 3", 0, "en_progreso", -1),
             ("Cableado de departamentos 301-304", 3, "en_progreso", 2),
-            ("Levantar muros de baño", 1, "completado", 0),
+            ("Levantar muros de baño", 1, "por_revisar", 0),
             ("Instalación hidráulica cocina", 5, "en_progreso", 1),
             ("Armado de castillos fachada", 7, "pendiente", 3),
         ],
@@ -76,7 +78,7 @@ GIROS: dict[str, dict] = {
         "jobs": [
             ("Afinación Nissan NP300 — cliente Gómez", 1, "en_progreso", -1),
             ("Cambio de clutch Aveo 2018", 2, "en_progreso", 1),
-            ("Enderezado puerta Versa", 3, "completado", 0),
+            ("Enderezado puerta Versa", 3, "por_revisar", 0),
             ("Diagnóstico eléctrico Hilux", 5, "en_progreso", 0),
             ("Pintura defensa March", 7, "pendiente", 2),
         ],
@@ -104,7 +106,7 @@ GIROS: dict[str, dict] = {
         "jobs": [
             ("Entrega Abarrotes Doña Mary (12 cajas)", 1, "en_progreso", -1),
             ("Ruta mercado Lucas de Gálvez", 2, "en_progreso", 0),
-            ("Cobranza tiendas Centro", 3, "completado", 0),
+            ("Cobranza tiendas Centro", 3, "por_revisar", 0),
             ("Entrega Súper Kanasín", 5, "en_progreso", 0),
             ("Levantar pedido tiendas nuevas", 7, "pendiente", 2),
         ],
@@ -132,7 +134,7 @@ GIROS: dict[str, dict] = {
         "jobs": [
             ("Mantenimiento 6 minisplits — Hotel Montejo", 1, "en_progreso", -1),
             ("Instalación minisplit Fracc. Las Américas", 2, "en_progreso", 0),
-            ("Limpieza profunda oficinas Altabrisa", 3, "completado", 0),
+            ("Limpieza profunda oficinas Altabrisa", 3, "por_revisar", 0),
             ("Revisión tablero eléctrico — Plaza Sur", 5, "en_progreso", 0),
             ("Fumigación bodega Periférico", 7, "pendiente", 1),
         ],
@@ -160,6 +162,24 @@ CHECKINS: list[tuple[int, str] | None] = [
 ]
 LATE_INDEX = 6
 MISSING_INDEX = 7
+HISTORY_DAYS = 30
+
+# Tareas ya cerradas en semanas anteriores, por giro (alimentan métricas y fichas).
+HISTORY_JOBS: dict[str, list[str]] = {
+    "construccion": ["Cimbra de trabes nivel 2", "Limpieza de área de trabajo", "Armado de castillos",
+                     "Aplanado de muros nivel 1", "Instalación de registros", "Colado de zapatas",
+                     "Trazo y nivelación", "Impermeabilización cisterna"],
+    "taller": ["Afinación Tsuru — cliente Pérez", "Frenos Jetta 2015", "Pintura defensa Sentra",
+               "Cambio de amortiguadores Ranger", "Diagnóstico Spark", "Hojalatería cofre Aveo",
+               "Alineación y balanceo Versa", "Servicio de clutch Saveiro"],
+    "distribuidora": ["Entrega Abarrotes El Sol", "Cobranza ruta Oriente", "Ruta Chuburná",
+                      "Entrega Mini Súper Itzimná", "Levantar pedido mercado San Benito",
+                      "Entrega tiendas Caucel", "Inventario bodega", "Cobranza tiendas Kanasín"],
+    "servicios": ["Mantenimiento minisplit — Clínica Norte", "Fumigación casa García",
+                  "Limpieza oficinas Montejo", "Revisión eléctrica Plaza Dorada",
+                  "Instalación minisplit Fracc. Altabrisa", "Limpieza de cisterna",
+                  "Mantenimiento preventivo hotel", "Fumigación restaurante Centro"],
+}
 
 
 def _at(t: time, shift: timedelta) -> datetime:
@@ -185,7 +205,7 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
         print("⚠ Sin --fotos: los eventos de foto no tendrán imagen en la galería")
 
     async with AsyncSessionLocal() as session, session.begin():
-        for model in (AttendanceDaily, Event, Job, Worker, Branch):
+        for model in (Notification, AttendanceDaily, Event, Job, Worker, Branch):
             await session.execute(delete(model).where(model.company_id == company_id))
 
         company = await session.get(Company, company_id)
@@ -205,6 +225,7 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
             workers.append(Worker(
                 company_id=company_id, branch_id=branches[b].id,
                 name=name, title=title, phone_number=phone, active=True,
+                created_at=local_now() - timedelta(days=60),
             ))
         session.add_all(workers)
         await session.flush()
@@ -215,6 +236,8 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
                 company_id=company_id, branch_id=workers[w].branch_id,
                 worker_id=workers[w].id, title=title, status=status,
                 due_date=today + timedelta(days=days),
+                created_at=local_now() - timedelta(days=5),
+                completed_at=_at(time(10, 15), shift) if status == "por_revisar" else None,
             ))
         session.add_all(jobs)
         await session.flush()
@@ -250,6 +273,16 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
             event(workers[w], _at(time(9 + n, 20), shift), "photo",
                   job_id=jobs[j].id, text_content=caption, media_url=media_url)
 
+        await _seed_history(session, company_id, giro, workers, today, shift,
+                            [e.media_url for e in session.new if isinstance(e, Event) and e.media_url])
+
+        # El bot ya le preguntó al que falta (se ve en "Necesita tu atención")
+        if local_now() > _at(time(8, 30), shift):
+            session.add(Notification(
+                company_id=company_id, kind="checkin_reminder",
+                worker_id=workers[MISSING_INDEX].id, sent_at=_at(time(8, 30), shift),
+            ))
+
         w, transcript = data["audio"]
         event(workers[w], _at(time(10, 5), shift), "audio",
               transcription=transcript, text_content=None)
@@ -268,6 +301,55 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
           f"{workers[LATE_INDEX].name} llegó tarde · {missing.name} no ha llegado")
     if mi_numero:
         print(f"  {missing.name} eres tú ({missing.phone_number}): manda \"presente\" en la demo.")
+
+
+async def _seed_history(session, company_id: uuid.UUID, giro: str, workers: list[Worker],
+                        today, shift: timedelta, photo_urls: list[str]) -> None:
+    """30 días hacia atrás: asistencia con patrones creíbles y tareas cerradas con foto."""
+    for back in range(1, HISTORY_DAYS):
+        d = today - timedelta(days=back)
+        if is_rest_day(d):
+            continue
+        for i, w in enumerate(workers):
+            if i == LATE_INDEX and back in (1, 2, 4, 9, 15):
+                status, hh, mm = "tarde", 8, 15 + (back * 7) % 25
+            elif i == MISSING_INDEX and back in (3, 11):
+                continue  # faltó: sin registro
+            elif (i * 7 + back) % 29 == 0:
+                continue
+            elif (i * 3 + back) % 13 == 0:
+                status, hh, mm = "tarde", 8, 12 + (i * 5 + back) % 20
+            else:
+                status, hh, mm = "presente", 7, (i * 11 + back * 7) % 55
+            session.add(AttendanceDaily(
+                company_id=company_id, worker_id=w.id, work_date=d, status=status,
+                checkin_at=datetime.combine(d, time(hh, mm), tzinfo=TZ),
+            ))
+
+    titles = HISTORY_JOBS[giro]
+    for n, back in enumerate((1, 2, 3, 5, 6, 8, 9, 10, 12, 15, 17, 19, 22, 24, 26)):
+        d = today - timedelta(days=back)
+        if is_rest_day(d):
+            d -= timedelta(days=1)
+        w = workers[(n * 3) % len(workers)]
+        closed = datetime.combine(d, time(15, (n * 13) % 60), tzinfo=TZ)
+        job = Job(
+            company_id=company_id, branch_id=w.branch_id, worker_id=w.id,
+            title=titles[n % len(titles)], status="completado",
+            due_date=d + timedelta(days=(n % 3) - 1),
+            created_at=closed - timedelta(days=2 + n % 3),
+            completed_at=closed - timedelta(hours=1), approved_at=closed,
+        )
+        session.add(job)
+        await session.flush()
+        if n % 5 != 4:  # casi todas cerradas con foto
+            session.add(Event(
+                company_id=company_id, worker_id=w.id, job_id=job.id,
+                whatsapp_message_id=f"demo-{uuid.uuid4()}", raw_payload={"demo": True},
+                event_type="photo", received_at=closed - timedelta(hours=1),
+                media_url=photo_urls[n % len(photo_urls)] if photo_urls else None,
+                text_content="Así quedó",
+            ))
 
 
 def main() -> None:

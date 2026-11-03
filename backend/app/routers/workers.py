@@ -2,16 +2,18 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import get_db
 from app.models.branch import Branch
+from app.models.event import Event
 from app.models.worker import Worker
 from app.phone import normalize_phone
-from app.services import whatsapp
+from app.services import insights, notify
+from app.timeutil import local_date
 
 router = APIRouter(prefix="/workers", tags=["workers"])
 
@@ -79,6 +81,35 @@ async def create_worker(
     return {"id": str(worker.id), "name": worker.name}
 
 
+@router.get("/{worker_id}/summary")
+async def worker_summary(
+    worker_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Ficha del trabajador: mes, calendario, lo que hizo hoy, tareas y fotos."""
+    company_id = uuid.UUID(settings.company_id)
+    worker = (await session.execute(
+        select(Worker).where(Worker.id == worker_id, Worker.company_id == company_id)
+    )).scalar_one_or_none()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    s = await insights.load_snapshot(session, company_id)
+    if worker not in s.workers:
+        s.workers.append(worker)  # inactivo: igual mostramos su historial
+
+    events_today = list((await session.execute(
+        select(Event).where(Event.worker_id == worker.id, local_date(Event.received_at) == s.today)
+    )).scalars())
+    photo_filter = (Event.worker_id == worker.id, Event.event_type == "photo", Event.media_url.is_not(None))
+    photos = list((await session.execute(
+        select(Event).where(*photo_filter).order_by(Event.received_at.desc()).limit(6)
+    )).scalars())
+    photo_total = (await session.execute(select(func.count(Event.id)).where(*photo_filter))).scalar_one()
+
+    return insights.worker_summary(s, worker, events_today, photos, photo_total)
+
+
 @router.patch("/{worker_id}", status_code=200)
 async def update_worker(
     worker_id: uuid.UUID,
@@ -136,9 +167,12 @@ async def remind_worker(
     worker = result.scalar_one_or_none()
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
-    first_name = worker.name.split()[0]
-    await whatsapp.send_text_message(
-        worker.phone_number,
-        f"¡Hola {first_name}! 👋 Aún no hemos recibido tu registro de hoy. Manda \"presente\" cuando llegues.",
-    )
+    try:
+        await notify.checkin_reminder(session, company_id, worker)
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail="WhatsApp no dejó mandar el mensaje. Escríbele desde tu celular.",
+        ) from e
+    await session.commit()
     return {"ok": True}

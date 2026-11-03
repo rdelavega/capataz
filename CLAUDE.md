@@ -37,9 +37,6 @@ multiempresa todavía — solo dejar el modelo de datos preparado.
 ### Fuera de alcance por ahora
 - Multi-tenant real / registro de nuevas empresas.
 - Pagos/facturación.
-- Notificaciones proactivas (templates de utilidad de WhatsApp) — diseñar el
-  flujo para que el **trabajador siempre escriba primero** y así todo caiga en
-  la ventana de servicio gratis de WhatsApp.
 - App móvil nativa — todo es WhatsApp + web responsive.
 
 ## Stack técnico
@@ -106,8 +103,26 @@ WhatsApp (trabajador)
 - **Teléfonos**: guardar con `normalize_phone()` (`+521XXXXXXXXXX` para
   México) y buscar con `phone_variants()` (`app/phone.py`).
 - **El bot siempre contesta** cuando el trabajador escribe (acuse de recibo),
-  así sabe que su mensaje llegó. Esas respuestas caen en la ventana de
-  servicio gratis.
+  así sabe que su mensaje llegó.
+- **Precios de Meta (desde oct 2026)**: los mensajes de servicio ya se cobran
+  después de 1,000/mes por número (~$0.0085 USD en México), igual que una
+  plantilla de utilidad. Por eso **sí hay mensajes proactivos** (el bot
+  persigue a la gente): recordatorio de llegada, avance de tareas y resumen
+  diario al dueño, con plantillas (`docs/plantillas_whatsapp.md`). Sin
+  plantilla configurada, ese envío no corre.
+- **El producto es "dejar de perseguir gente"**: el panel muestra pendientes
+  accionables (quién falta, qué se atoró, qué aprobar), no solo contadores.
+  Las reglas viven en `app/services/insights.py`; panel, ficha y resumen de
+  WhatsApp usan las mismas para contar lo mismo.
+- **Tarea terminada = foto + visto bueno**: "Ya terminé" deja la tarea en
+  `por_revisar`, el bot pide foto, y solo el dueño la pasa a `completado`.
+- **Hora de entrada**: `WORKDAY_START` (08:00) + `LATE_TOLERANCE_MINUTES`
+  (10). Check-in después = `tarde`. `REST_WEEKDAYS` (domingo) no cuenta faltas.
+- **Escribirle a un trabajador desde el dashboard = link `wa.me`** desde el
+  celular del dueño (gratis, siempre llega). Lo que manda el bot por API va con
+  plantilla.
+- **Esquema**: no hay Alembic aún; los cambios van en `app/migrations.py`
+  (sentencias idempotentes que corren al arrancar) y en `schema.sql`.
 - Tests en `backend/tests/` con pytest (`pip install -r requirements-dev.txt`,
   `python -m pytest tests`). El parser se prueba con sesión y WhatsApp
   simulados.
@@ -126,16 +141,20 @@ capataz/
 │   │   ├── dependencies.py       # get_current_user (JWT)
 │   │   ├── timeutil.py           # fechas en hora local
 │   │   ├── phone.py              # normalización de teléfonos MX
+│   │   ├── migrations.py         # cambios de esquema idempotentes al arrancar
 │   │   ├── models/               # SQLAlchemy models
 │   │   ├── routers/
 │   │   │   ├── webhook.py        # POST/GET /webhook/whatsapp
 │   │   │   ├── auth.py           # /auth/login, /auth/me
-│   │   │   ├── dashboard.py      # /dashboard/overview, /events, /workers
-│   │   │   ├── workers.py        # alta/baja de trabajadores y sucursales, recordar
-│   │   │   └── jobs.py           # CRUD de tareas, recordar con botones de WA
+│   │   │   ├── dashboard.py      # /dashboard/today, /events, /workers
+│   │   │   ├── workers.py        # alta/baja, ficha (/summary), recordar
+│   │   │   └── jobs.py           # CRUD de tareas, aprobar/regresar, recordar
 │   │   └── services/
 │   │       ├── whatsapp.py       # cliente Graph API (enviar mensajes, descargar media)
 │   │       ├── parser.py         # clasifica eventos entrantes y contesta
+│   │       ├── insights.py       # pendientes, métricas, ficha (reglas del negocio)
+│   │       ├── notify.py         # mensajes proactivos (plantillas) + registro
+│   │       ├── scheduler.py      # recordatorios y resumen diario a su hora
 │   │       ├── storage.py        # subida a R2
 │   │       └── transcription.py  # cliente Whisper
 │   ├── tests/
@@ -146,35 +165,51 @@ capataz/
 │   └── .env.example
 ├── frontend/
 │   ├── src/
-│   │   ├── components/           # Sidebar + MobileNav, WorkerFicha, BranchSection
+│   │   ├── components/           # Sidebar, WorkerDrawer (ficha), Sparkbars, PhotoLightbox…
+│   │   ├── lib/format.ts         # fechas/horas en español, links wa.me
 │   │   ├── pages/                # Dashboard, RegistrosDiarios, Equipo, Tareas, Login
 │   │   └── api/                  # cliente fetch hacia backend
 │   └── package.json
+├── docs/plantillas_whatsapp.md   # plantillas a dar de alta en Meta
 ├── schema.sql
 └── CLAUDE.md
 ```
 
 ## Estado actual (2026-11-02)
 
-En producción: Railway (backend), Vercel (frontend), Supabase (DB).
-Funciona: webhook + parser, pase de lista, respuestas del bot, tareas con
-botones de WhatsApp, login del dueño, dashboard con semáforo, registros
-diarios con galería, alta de trabajadores y sucursales, navegación móvil.
+En producción: Railway (backend), Vercel (frontend), Supabase (DB), R2 (fotos).
+Funciona: webhook con firma, parser, pase de lista con llegadas tarde,
+respuestas del bot, tareas con "Por revisar" (foto + visto bueno), login del
+dueño, registros diarios con galería, alta de trabajadores y sucursales,
+navegación móvil.
+
+Dashboard (rediseño aprobado 2026-11-02):
+- **Hoy** (`GET /dashboard/today`): "Necesita tu atención" con acción por
+  pendiente, 4 métricas con 14 días de tendencia, semáforo por sucursal y lo
+  último que llegó.
+- **Ficha del trabajador** (`GET /workers/{id}/summary`): panel lateral desde
+  cualquier pantalla (`useWorkerDrawer().openWorker(id)`): 30 días de
+  asistencia, lo que hizo hoy, sus tareas y fotos.
+- **Equipo**: lista agrupada por sucursal con búsqueda y filtros (para 20+).
+- **Tareas**: tablero Atrasadas / Por revisar / En curso / Terminadas.
+- **Envíos programados** (`app/services/scheduler.py`): corren dentro de la app
+  cada minuto; `scheduled_runs` evita duplicados.
 
 Demos: `python seed_demo.py --giro {construccion,taller,distribuidora,servicios}
---empresa "..." --mi-numero "..." --fotos DIR`. El trabajador de
-`--mi-numero` es el que falta: manda "presente" en vivo durante la demo.
+--empresa "..." --mi-numero "..." --fotos DIR`. Arma 30 días de historial.
+El trabajador de `--mi-numero` es el que falta: manda "presente" en vivo
+durante la demo.
 
 ## Próximos pasos
 
-1. **Botón "Recordar"**: falla si el trabajador no escribió en las últimas
-   24 h (error 131047 de Meta). Siguiente a revisar: abrir `wa.me` desde el
-   celular del dueño en lugar de enviar por la API.
-2. Foto o ubicación cuentan como check-in (evidencia de presencia).
-3. Ligar fotos a tareas (evidencia de avance, feature #4).
-4. Historial: asistencia por mes por trabajador, exportable.
-5. Alembic (hoy las tablas se crean con `create_all`).
+1. Dar de alta las 3 plantillas en Meta y poner sus nombres en Railway
+   (`docs/plantillas_whatsapp.md`); teléfono del dueño con
+   `seed_user.py --phone`.
+2. Aprobar/regresar tareas desde el WhatsApp del dueño (botones en el resumen).
+3. Foto o ubicación cuentan como check-in (evidencia de presencia).
+4. Exportar asistencia del mes por trabajador (Excel/PDF para nómina).
+5. Alembic (convertir `app/migrations.py` en la primera revisión).
 
 Infra pendiente: `WHATSAPP_APP_SECRET` en Railway (sin él el webhook acepta
-POSTs sin firma y lo avisa en logs), configurar R2 en Railway (sin R2 no hay fotos en la
-galería) y evitar que Supabase pause el proyecto por inactividad.
+POSTs sin firma y lo avisa en logs) y evitar que Supabase pause el proyecto
+por inactividad.

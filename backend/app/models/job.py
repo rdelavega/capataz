@@ -1,12 +1,14 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
-JobStatus = Enum("pendiente", "en_progreso", "completado", "atrasado", name="job_status")
+# por_revisar: el trabajador dijo "terminé" y espera el visto bueno del dueño.
+# completado: el dueño ya aprobó (approved_at).
+JobStatus = Enum("pendiente", "en_progreso", "por_revisar", "completado", "atrasado", name="job_status")
 
 
 class Job(Base):
@@ -20,6 +22,9 @@ class Job(Base):
     description: Mapped[str | None] = mapped_column(String)
     status: Mapped[str] = mapped_column(JobStatus, nullable=False, default="pendiente")
     due_date: Mapped[date | None]
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

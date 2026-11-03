@@ -1,0 +1,136 @@
+import uuid
+from datetime import date, datetime, timedelta
+
+from app.models.attendance import AttendanceDaily
+from app.models.branch import Branch
+from app.models.event import Event
+from app.models.job import Job
+from app.models.worker import Worker
+from app.services import insights, notify, scheduler
+from app.services.whatsapp import build_template_payload
+from app.timeutil import TZ
+
+# Lunes 2 nov 2026, 10:42 am en Mérida
+TODAY = date(2026, 11, 2)
+NOW = datetime(2026, 11, 2, 10, 42, tzinfo=TZ)
+LONG_AGO = datetime(2026, 9, 1, 9, 0, tzinfo=TZ)
+
+OBRA = Branch(id=uuid.uuid4(), name="Altabrisa")
+
+
+def _worker(name: str) -> Worker:
+    return Worker(id=uuid.uuid4(), name=name, phone_number="+5219990000000", branch_id=OBRA.id,
+                  active=True, created_at=LONG_AGO)
+
+
+def _att(w: Worker, d: date, status: str, hh: int = 7, mm: int = 45) -> AttendanceDaily:
+    return AttendanceDaily(worker_id=w.id, work_date=d, status=status,
+                           checkin_at=datetime.combine(d, datetime.min.time(), tzinfo=TZ).replace(hour=hh, minute=mm))
+
+
+def _job(title: str, w: Worker | None, status: str, due: date | None, **kw) -> Job:
+    return Job(id=uuid.uuid4(), title=title, worker_id=w.id if w else None, branch_id=OBRA.id,
+               status=status, due_date=due, created_at=LONG_AGO, updated_at=LONG_AGO, **kw)
+
+
+def _snap(workers, attendance=(), jobs=(), photos=(), events_today=(), now=NOW) -> insights.Snapshot:
+    att: dict = {}
+    for a in attendance:
+        att.setdefault(a.worker_id, {})[a.work_date] = a
+    by_job: dict = {}
+    for p in photos:
+        by_job.setdefault(p.job_id, []).append(p)
+    return insights.Snapshot(
+        today=now.date(), now=now, branches={OBRA.id: OBRA}, workers=list(workers), attendance=att,
+        jobs=list(jobs), photos_by_job=by_job, events_today=list(events_today), last_event={},
+    )
+
+
+def test_day_codes() -> None:
+    start = date(2026, 10, 1)
+    assert insights.day_code(None, date(2026, 11, 1), TODAY, start) == "d"   # domingo
+    assert insights.day_code(None, date(2026, 10, 30), TODAY, start) == "f"
+    assert insights.day_code(None, TODAY, TODAY, start) == "n"
+    assert insights.day_code(None, date(2026, 9, 1), TODAY, start) == "-"
+    assert insights.attendance_pct(["p", "t", "f", "d", "n"]) == 67
+
+
+def test_attention_no_llego_y_ordenado_por_urgencia() -> None:
+    pedro, luis = _worker("Pedro May"), _worker("Luis Pech")
+    review = _job("Colado de losa", luis, "por_revisar", TODAY, completed_at=NOW - timedelta(minutes=30))
+    items = insights.attention_items(_snap([pedro, luis], [_att(luis, TODAY, "presente")], [review]))
+    kinds = [i["kind"] for i in items]
+    assert kinds[0] == "no_llego" and items[0]["worker_name"] == "Pedro May"
+    assert "por_revisar" in kinds
+    assert kinds.index("no_llego") < kinds.index("por_revisar")
+
+
+def test_attention_no_avisa_antes_de_la_hora_de_entrada() -> None:
+    pedro = _worker("Pedro May")
+    early = datetime(2026, 11, 2, 8, 5, tzinfo=TZ)
+    assert insights.attention_items(_snap([pedro], now=early)) == []
+
+
+def test_attention_tarea_atrasada_y_vence_hoy_sin_foto() -> None:
+    w = _worker("Pedro May")
+    late = _job("Impermeabilización", w, "en_progreso", TODAY - timedelta(days=1))
+    today = _job("Firme de cochera", w, "pendiente", TODAY)
+    items = insights.attention_items(_snap([w], [_att(w, TODAY, "presente")], [late, today]))
+    by_kind = {i["kind"]: i for i in items}
+    assert "venció ayer" in by_kind["tarea_atrasada"]["title"]
+    assert by_kind["vence_hoy"]["severity"] == "warn"
+
+
+def test_attention_tarde_repetido() -> None:
+    w = _worker("Jorge Canul")
+    att = [_att(w, TODAY - timedelta(days=d), "tarde", 8, 24) for d in (0, 1, 2)]
+    items = insights.attention_items(_snap([w], att))
+    assert any(i["kind"] == "tarde_repetido" and "8:24 am" in i["detail"] for i in items)
+
+
+def test_attention_obra_sin_fotos_despues_de_mediodia() -> None:
+    w = _worker("Manuel Uc")
+    afternoon = datetime(2026, 11, 2, 13, 0, tzinfo=TZ)
+    items = insights.attention_items(_snap([w], [_att(w, TODAY, "presente")], now=afternoon))
+    assert [i["kind"] for i in items] == ["obra_sin_fotos"]
+
+
+def test_metrics_cuenta_cerradas_con_foto() -> None:
+    w = _worker("Ana Chi")
+    done = _job("Demolición", w, "completado", TODAY, approved_at=NOW - timedelta(days=1))
+    photo = Event(id=uuid.uuid4(), job_id=done.id, worker_id=w.id, event_type="photo",
+                  received_at=NOW - timedelta(days=1))
+    m = insights.metrics(_snap([w], [_att(w, TODAY, "presente")], [done], [photo]))
+    assert m["closed"]["week"] == 1 and m["closed"]["week_with_photo"] == 1
+    assert m["attendance"]["present"] == 1 and m["attendance"]["expected"] == 1
+    assert len(m["days"]) == 14 and m["attendance"]["series"][-2] is None  # ayer domingo
+
+
+def test_branch_semaforo_rojo_si_hay_atrasadas() -> None:
+    w = _worker("Pedro May")
+    late = _job("Impermeabilización", w, "atrasado", None)
+    [b] = insights.branch_stats(_snap([w], [_att(w, TODAY, "presente")], [late]))
+    assert b["semaforo"] == "rojo" and b["jobs_overdue"] == 1
+
+
+def test_resumen_diario_params_sin_saltos_de_linea() -> None:
+    a, b = _worker("Luis Pech"), _worker("Pedro May")
+    params = notify.summary_params(_snap([a, b], [_att(a, TODAY, "presente")]))
+    assert params[1:4] == ["1", "2", "Pedro May"]
+    assert all("\n" not in p for p in params)
+
+
+def test_template_payload_limpia_parametros_y_botones() -> None:
+    p = build_template_payload("+521999", "capataz_avance", ["Luis", "Losa\n2º piso"], ["completado::1"])
+    body, button = p["template"]["components"]
+    assert body["parameters"][1]["text"] == "Losa 2º piso"
+    assert button["parameters"][0]["payload"] == "completado::1"
+
+
+def test_scheduler_solo_con_plantilla_y_en_su_ventana(monkeypatch) -> None:
+    monkeypatch.setattr(scheduler.settings, "wa_template_checkin_reminder", "capataz_llegada")
+    monkeypatch.setattr(scheduler.settings, "wa_template_daily_summary", "")
+    at_830 = datetime(2026, 11, 2, 8, 31, tzinfo=TZ)
+    assert [k for k, _ in scheduler.due_jobs(at_830)] == ["checkin_reminder"]
+    assert scheduler.due_jobs(datetime(2026, 11, 2, 11, 0, tzinfo=TZ)) == []      # pasó la ventana
+    assert scheduler.due_jobs(datetime(2026, 11, 1, 8, 31, tzinfo=TZ)) == []       # domingo

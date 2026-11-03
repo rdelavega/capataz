@@ -4,6 +4,7 @@ from app.models.branch import Branch
 from app.models.company import Company
 from app.models.event import Event
 from app.models.job import Job
+from app.models.notification import Notification, ScheduledRun
 from app.models.user import User
 from app.models.worker import Worker
 
@@ -14,6 +15,8 @@ __all__ = [
     "Company",
     "Event",
     "Job",
+    "Notification",
+    "ScheduledRun",
     "User",
     "Worker",
 ]
