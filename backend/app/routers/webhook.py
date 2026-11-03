@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import json
 import logging
 import uuid
 
@@ -14,6 +17,27 @@ router = APIRouter(prefix="/webhook", tags=["webhook"])
 logger = logging.getLogger(__name__)
 
 
+def is_valid_signature(body: bytes, signature_header: str | None, app_secret: str) -> bool:
+    """Verifica X-Hub-Signature-256: HMAC-SHA256 del body crudo con el App Secret."""
+    if not signature_header or not signature_header.startswith("sha256="):
+        return False
+    expected = hmac.new(app_secret.encode(), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature_header.removeprefix("sha256="))
+
+
+async def verified_body(request: Request) -> bytes:
+    """Lee el body crudo y valida la firma de Meta antes de tocar la DB."""
+    body = await request.body()
+    if settings.whatsapp_app_secret:
+        signature = request.headers.get("X-Hub-Signature-256")
+        if not is_valid_signature(body, signature, settings.whatsapp_app_secret):
+            logger.warning("Webhook rechazado: firma X-Hub-Signature-256 inválida")
+            raise HTTPException(status_code=401, detail="Firma inválida")
+    else:
+        logger.warning("WHATSAPP_APP_SECRET no configurado: webhook sin validar firma")
+    return body
+
+
 @router.get("/whatsapp")
 async def verify_webhook(
     hub_mode: str = Query(alias="hub.mode"),
@@ -28,12 +52,15 @@ async def verify_webhook(
 
 @router.post("/whatsapp", status_code=200)
 async def receive_message(
-    request: Request,
     background_tasks: BackgroundTasks,
+    body: bytes = Depends(verified_body),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     """Recibe mensajes de WhatsApp Cloud API. Responde 200 inmediatamente."""
-    payload = await request.json()
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="JSON inválido")
     company_id = uuid.UUID(settings.company_id)
 
     # Extraer mensajes del payload (puede ser solo un status update).

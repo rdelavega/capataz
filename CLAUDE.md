@@ -173,8 +173,8 @@ Demos: `python seed_demo.py --giro {construccion,taller,distribuidora,servicios}
 2. Foto o ubicación cuentan como check-in (evidencia de presencia).
 3. Ligar fotos a tareas (evidencia de avance, feature #4).
 4. Historial: asistencia por mes por trabajador, exportable.
-5. Validar firma `X-Hub-Signature-256` en el webhook.
-6. Alembic (hoy las tablas se crean con `create_all`).
+5. Alembic (hoy las tablas se crean con `create_all`).
 
-Infra pendiente: configurar R2 en Railway (sin R2 no hay fotos en la
+Infra pendiente: `WHATSAPP_APP_SECRET` en Railway (sin él el webhook acepta
+POSTs sin firma y lo avisa en logs), configurar R2 en Railway (sin R2 no hay fotos en la
 galería) y evitar que Supabase pause el proyecto por inactividad.

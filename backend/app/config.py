@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     whatsapp_verify_token: str
     whatsapp_token: str
     whatsapp_phone_number_id: str
+    # App Secret de la app de Meta (App settings → Basic). Valida X-Hub-Signature-256.
+    whatsapp_app_secret: str = ""
 
     r2_account_id: str = ""
     r2_access_key_id: str = ""
