@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db import get_db
 from app.models.branch import Branch
+from app.models.crew import Crew
 from app.models.job import Job
 from app.models.worker import Worker
 from app.services import insights, notify, whatsapp
@@ -29,7 +30,9 @@ class JobReject(BaseModel):
 class JobCreate(BaseModel):
     title: str
     description: str | None = None
-    worker_id: uuid.UUID | None = None
+    crew_id: uuid.UUID | None = None    # lo normal: se le manda a una cuadrilla
+    worker_id: uuid.UUID | None = None  # opcional: a una persona
+    branch_id: uuid.UUID | None = None  # obra; si no viene, la de la cuadrilla o la persona
     due_date: date | None = None
 
 
@@ -37,7 +40,9 @@ class JobUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     status: str | None = None
+    crew_id: uuid.UUID | None = None
     worker_id: uuid.UUID | None = None
+    branch_id: uuid.UUID | None = None
     due_date: date | None = None
 
 
@@ -91,23 +96,14 @@ async def create_job(
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     company_id = uuid.UUID(settings.company_id)
-
-    branch_id: uuid.UUID | None = None
-    if body.worker_id:
-        result = await session.execute(select(Worker).where(Worker.id == body.worker_id))
-        worker = result.scalar_one_or_none()
-        if worker:
-            branch_id = worker.branch_id
-
     job = Job(
         company_id=company_id,
         title=body.title.strip(),
         description=body.description.strip() if body.description else None,
-        worker_id=body.worker_id,
-        branch_id=branch_id,
         due_date=body.due_date,
         status="pendiente",
     )
+    await _assign(session, job, body.crew_id, body.worker_id, body.branch_id)
     session.add(job)
     await session.commit()
     await session.refresh(job)
@@ -141,12 +137,13 @@ async def update_job(
         _set_status(job, updates["status"])
     if "due_date" in updates:
         job.due_date = updates["due_date"]
-    if "worker_id" in updates and updates["worker_id"]:
-        job.worker_id = updates["worker_id"]
-        res2 = await session.execute(select(Worker).where(Worker.id == updates["worker_id"]))
-        w = res2.scalar_one_or_none()
-        if w:
-            job.branch_id = w.branch_id
+    if {"crew_id", "worker_id", "branch_id"} & updates.keys():
+        await _assign(
+            session, job,
+            updates.get("crew_id", job.crew_id),
+            updates.get("worker_id", job.worker_id),
+            updates.get("branch_id", job.branch_id if "crew_id" not in updates and "worker_id" not in updates else None),
+        )
 
     await session.commit()
     return {"ok": True}
@@ -167,6 +164,27 @@ async def delete_job(
     await session.delete(job)
     await session.commit()
     return {"ok": True}
+
+
+async def _assign(session: AsyncSession, job: Job, crew_id, worker_id, branch_id) -> None:
+    """Asigna cuadrilla y/o persona. La obra sale de lo explícito, la cuadrilla o la persona."""
+    company_id = uuid.UUID(settings.company_id)
+    crew = worker = None
+    if crew_id:
+        crew = (await session.execute(
+            select(Crew).where(Crew.id == crew_id, Crew.company_id == company_id)
+        )).scalar_one_or_none()
+        if crew is None:
+            raise HTTPException(status_code=404, detail="Cuadrilla no encontrada")
+    if worker_id:
+        worker = (await session.execute(
+            select(Worker).where(Worker.id == worker_id, Worker.company_id == company_id)
+        )).scalar_one_or_none()
+        if worker is None:
+            raise HTTPException(status_code=404, detail="Trabajador no encontrado")
+    job.crew_id = crew.id if crew else None
+    job.worker_id = worker.id if worker else None
+    job.branch_id = branch_id or (crew.branch_id if crew else None) or (worker.branch_id if worker else None)
 
 
 def _set_status(job: Job, status: str) -> None:
@@ -194,9 +212,14 @@ async def _get_job(session: AsyncSession, job_id: uuid.UUID) -> Job:
 
 
 async def _job_worker(session: AsyncSession, job: Job) -> Worker | None:
-    if not job.worker_id:
+    """Con quién habla el bot: la persona asignada o el encargado de la cuadrilla."""
+    worker_id = job.worker_id
+    if not worker_id and job.crew_id:
+        crew = await session.get(Crew, job.crew_id)
+        worker_id = crew.lead_worker_id if crew else None
+    if not worker_id:
         return None
-    return (await session.execute(select(Worker).where(Worker.id == job.worker_id))).scalar_one_or_none()
+    return (await session.execute(select(Worker).where(Worker.id == worker_id))).scalar_one_or_none()
 
 
 @router.post("/{job_id}/approve", status_code=200)
@@ -258,7 +281,10 @@ async def remind_job(
     job = await _get_job(session, job_id)
     worker = await _job_worker(session, job)
     if not worker:
-        raise HTTPException(status_code=400, detail="La tarea no tiene trabajador asignado")
+        raise HTTPException(
+            status_code=400,
+            detail="La tarea no tiene a quién preguntarle: asígnala a una persona o ponle encargado a la cuadrilla",
+        )
     try:
         await notify.job_progress(session, job.company_id, job, worker, local_today())
     except notify.NoWindow as e:

@@ -19,6 +19,19 @@ STATEMENTS: list[str] = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number TEXT",
     "CREATE INDEX IF NOT EXISTS idx_events_job ON events (job_id)",
     """
+    CREATE TABLE IF NOT EXISTS crews (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id      UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        branch_id       UUID REFERENCES branches(id) ON DELETE SET NULL,
+        name            TEXT NOT NULL,
+        lead_worker_id  UUID REFERENCES workers(id) ON DELETE SET NULL,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+    """,
+    "ALTER TABLE workers ADD COLUMN IF NOT EXISTS crew_id UUID REFERENCES crews(id) ON DELETE SET NULL",
+    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS crew_id UUID REFERENCES crews(id) ON DELETE SET NULL",
+    "CREATE INDEX IF NOT EXISTS idx_jobs_crew ON jobs (crew_id)",
+    """
     CREATE TABLE IF NOT EXISTS notifications (
         id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,

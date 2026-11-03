@@ -111,6 +111,7 @@ async def get_workers(session: AsyncSession = Depends(get_db)) -> dict:
             "id": str(w.id), "name": w.name, "phone_number": w.phone_number, "title": w.title,
             "branch_id": str(w.branch_id) if w.branch_id else None,
             "branch_name": b.name if b else None, "active": False,
+            "crew_id": None, "crew_name": None, "is_lead": False,
             "today_status": None, "checkin_at": None, "last_event": None,
             "active_jobs": 0, "overdue_jobs": 0, "attendance_30d": [],
             "attendance_pct": None, "late_week": 0,

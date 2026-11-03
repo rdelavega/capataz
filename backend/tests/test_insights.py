@@ -218,3 +218,22 @@ def test_secret_key_por_defecto_permitida_en_local(monkeypatch) -> None:
     for k in [k for k in __import__("os").environ if k.startswith("RAILWAY_ENVIRONMENT")]:
         monkeypatch.delenv(k)
     assert Settings().secret_key
+
+
+# ─── Cuadrillas ───────────────────────────────────────────────────────────────
+
+from app.models.crew import Crew  # noqa: E402
+
+
+def test_trabajo_de_cuadrilla_habla_con_el_encargado() -> None:
+    jorge, luis = _worker("Jorge Canché"), _worker("Luis Pech")
+    crew = Crew(id=uuid.uuid4(), name="Albañiles", lead_worker_id=jorge.id)
+    jorge.crew_id = luis.crew_id = crew.id
+    job = _job("Colado de losa", None, "en_progreso", TODAY - timedelta(days=1), crew_id=crew.id)
+    s = _snap([jorge, luis], [_att(jorge, TODAY, "presente"), _att(luis, TODAY, "presente")], [job])
+    s.crews = {crew.id: crew}
+    assert s.contact(job) is jorge
+    assert s.who(job) == "Albañiles (enc. Jorge Canché)"
+    assert job in s.jobs_of(luis)  # el trabajo de la cuadrilla aparece en la ficha de cada integrante
+    item = next(i for i in insights.attention_items(s) if i["kind"] == "tarea_atrasada")
+    assert item["worker_name"] == "Jorge Canché" and "Albañiles" in item["detail"]

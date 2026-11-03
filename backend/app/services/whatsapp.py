@@ -47,6 +47,31 @@ async def send_interactive_buttons(to: str, body_text: str, buttons: list[dict])
         resp.raise_for_status()
 
 
+async def send_interactive_list(to: str, body_text: str, button_label: str, rows: list[dict]) -> None:
+    """Lista desplegable (hasta 10 opciones). rows: [{"id", "title" (≤24), "description" (≤72)}]."""
+    headers = {
+        "Authorization": f"Bearer {settings.whatsapp_token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "body": {"text": body_text},
+            "action": {"button": button_label[:20], "sections": [{"title": "Trabajos", "rows": rows[:10]}]},
+        },
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{GRAPH_API_BASE}/{settings.whatsapp_phone_number_id}/messages",
+            headers=headers,
+            json=payload,
+        )
+        resp.raise_for_status()
+
+
 async def send_text_message(to: str, body: str) -> None:
     """Envía un mensaje de texto al trabajador. Requiere que el worker haya escrito primero."""
     headers = {

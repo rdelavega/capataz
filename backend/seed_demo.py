@@ -26,7 +26,7 @@ from sqlalchemy import delete
 
 from app.config import settings
 from app.db import AsyncSessionLocal, engine
-from app.models import AttendanceDaily, Branch, Company, Event, Job, Notification, Worker
+from app.models import AttendanceDaily, Branch, Company, Crew, Event, Job, Notification, Worker
 from app.phone import normalize_phone
 from app.services import storage
 from app.timeutil import TZ, is_rest_day, local_now, local_today
@@ -37,6 +37,12 @@ from app.timeutil import TZ, is_rest_day, local_now, local_today
 GIROS: dict[str, dict] = {
     "construccion": {
         "branches": ["Obra Altabrisa — Torre B", "Obra Cholul — Casa Muestra"],
+        # (nombre, obra o None si se mueve entre obras, encargado, integrantes)
+        "crews": [
+            ("Albañiles Altabrisa", 0, 0, [0, 1, 2]),
+            ("Instalaciones", None, 3, [3, 5]),
+            ("Cuadrilla Cholul", 1, 7, [4, 6, 7]),
+        ],
         "workers": [
             ("Jorge Canché", "Maestro de obra", 0),
             ("Luis Pech", "Albañil", 0),
@@ -205,7 +211,7 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
         print("⚠ Sin --fotos: los eventos de foto no tendrán imagen en la galería")
 
     async with AsyncSessionLocal() as session, session.begin():
-        for model in (Notification, AttendanceDaily, Event, Job, Worker, Branch):
+        for model in (Notification, AttendanceDaily, Event, Job, Crew, Worker, Branch):
             await session.execute(delete(model).where(model.company_id == company_id))
 
         company = await session.get(Company, company_id)
@@ -230,11 +236,35 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
         session.add_all(workers)
         await session.flush()
 
+        # Cuadrillas: si el giro no las define, una por sucursal con el primero como
+        # encargado; en la segunda, el encargado es el que "falta" (tu número) para
+        # que en la demo puedas reportar el trabajo de tu cuadrilla.
+        crew_defs = data.get("crews") or [
+            (f"Cuadrilla {data['branches'][b].split(' — ')[0]}", b,
+             MISSING_INDEX if b == 1 else members[0], members)
+            for b in range(len(branches))
+            if (members := [i for i, (_, _, wb) in enumerate(data["workers"]) if wb == b])
+        ]
+        crew_of: dict[int, Crew] = {}
+        for name, b, lead, members in crew_defs:
+            crew = Crew(company_id=company_id, name=name,
+                        branch_id=branches[b].id if b is not None else None)
+            session.add(crew)
+            await session.flush()
+            crew.lead_worker_id = workers[lead].id
+            for i in members:
+                workers[i].crew_id = crew.id
+                crew_of[i] = crew
+        await session.flush()
+
+        # Los trabajos se le mandan a la cuadrilla, no a una persona.
         jobs: list[Job] = []
         for title, w, status, days in data["jobs"]:
+            crew = crew_of.get(w)
             jobs.append(Job(
                 company_id=company_id, branch_id=workers[w].branch_id,
-                worker_id=workers[w].id, title=title, status=status,
+                crew_id=crew.id if crew else None,
+                worker_id=None if crew else workers[w].id, title=title, status=status,
                 due_date=today + timedelta(days=days),
                 created_at=local_now() - timedelta(days=5),
                 completed_at=_at(time(10, 15), shift) if status == "por_revisar" else None,
@@ -273,7 +303,7 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
             event(workers[w], _at(time(9 + n, 20), shift), "photo",
                   job_id=jobs[j].id, text_content=caption, media_url=media_url)
 
-        await _seed_history(session, company_id, giro, workers, today, shift,
+        await _seed_history(session, company_id, giro, workers, crew_of, today, shift,
                             [e.media_url for e in session.new if isinstance(e, Event) and e.media_url])
 
         # El bot ya le preguntó al que falta (se ve en "Necesita tu atención")
@@ -297,14 +327,14 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
 
     missing = workers[MISSING_INDEX]
     print(f"\n✓ Demo '{giro}' lista para {empresa}")
-    print(f"  {len(workers)} trabajadores · {len(jobs)} tareas · "
+    print(f"  {len(workers)} trabajadores · {len(crew_of and set(crew_of.values()))} cuadrillas · {len(jobs)} trabajos · "
           f"{workers[LATE_INDEX].name} llegó tarde · {missing.name} no ha llegado")
     if mi_numero:
         print(f"  {missing.name} eres tú ({missing.phone_number}): manda \"presente\" en la demo.")
 
 
 async def _seed_history(session, company_id: uuid.UUID, giro: str, workers: list[Worker],
-                        today, shift: timedelta, photo_urls: list[str]) -> None:
+                        crew_of: dict[int, Crew], today, shift: timedelta, photo_urls: list[str]) -> None:
     """30 días hacia atrás: asistencia con patrones creíbles y tareas cerradas con foto."""
     for back in range(1, HISTORY_DAYS):
         d = today - timedelta(days=back)
@@ -331,10 +361,13 @@ async def _seed_history(session, company_id: uuid.UUID, giro: str, workers: list
         d = today - timedelta(days=back)
         if is_rest_day(d):
             d -= timedelta(days=1)
-        w = workers[(n * 3) % len(workers)]
+        wi = (n * 3) % len(workers)
+        w = workers[wi]
+        crew = crew_of.get(wi)
         closed = datetime.combine(d, time(15, (n * 13) % 60), tzinfo=TZ)
         job = Job(
-            company_id=company_id, branch_id=w.branch_id, worker_id=w.id,
+            company_id=company_id, branch_id=w.branch_id,
+            crew_id=crew.id if crew else None, worker_id=None if crew else w.id,
             title=titles[n % len(titles)], status="completado",
             due_date=d + timedelta(days=(n % 3) - 1),
             created_at=closed - timedelta(days=2 + n % 3),

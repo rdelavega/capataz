@@ -169,6 +169,9 @@ export interface WorkerDetail {
   branch_id: string | null
   branch_name: string | null
   active: boolean
+  crew_id: string | null
+  crew_name: string | null
+  is_lead: boolean
   today_status: AttendanceStatus | null
   checkin_at: string | null
   last_event: LastEvent | null
@@ -191,6 +194,14 @@ export interface JobCardData {
   id: string
   title: string
   status: JobStatus
+  crew_id: string | null
+  crew_name: string | null
+  /** 'Luis Pech', 'Albañiles (enc. Jorge Canché)' o 'Sin asignar' */
+  assignee: string
+  /** Con quién habla el bot: la persona asignada o el encargado de la cuadrilla. */
+  contact_id: string | null
+  contact_name: string | null
+  contact_phone: string | null
   due_date: string | null
   overdue: boolean
   completed_at: string | null
@@ -254,6 +265,7 @@ export interface WorkerCreate {
   phone_number: string
   branch_id: string
   title?: string
+  crew_id?: string
 }
 
 export const fetchBranches = () =>
@@ -271,11 +283,36 @@ export const createWorker = (data: WorkerCreate) =>
     body: JSON.stringify(data),
   })
 
-export const updateWorkerTitle = (id: string, title: string | null) =>
-  apiFetch<{ ok: boolean }>(`/workers/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ title }),
-  })
+export const updateWorker = (id: string, data: { title?: string | null; crew_id?: string | null; branch_id?: string | null }) =>
+  apiFetch<{ ok: boolean }>(`/workers/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+
+export const updateWorkerTitle = (id: string, title: string | null) => updateWorker(id, { title })
+
+// ─── Cuadrillas ──────────────────────────────────────────────────────────────
+
+export interface CrewData {
+  id: string
+  name: string
+  branch_id: string | null
+  lead_worker_id: string | null
+}
+
+export interface CrewInput {
+  name?: string
+  branch_id?: string | null
+  lead_worker_id?: string | null
+}
+
+export const fetchCrews = () => apiFetch<{ crews: CrewData[] }>('/workers/crews')
+
+export const createCrew = (data: CrewInput) =>
+  apiFetch<{ id: string; name: string }>('/workers/crews', { method: 'POST', body: JSON.stringify(data) })
+
+export const updateCrew = (id: string, data: CrewInput) =>
+  apiFetch<{ ok: boolean }>(`/workers/crews/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+
+export const deleteCrew = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/workers/crews/${id}`, { method: 'DELETE' })
 
 export const deactivateWorker = (id: string) =>
   apiFetch<{ ok: boolean }>(`/workers/${id}`, { method: 'DELETE' })
@@ -307,7 +344,9 @@ export interface JobsResponse {
 export interface JobCreate {
   title: string
   description?: string
+  crew_id?: string
   worker_id?: string
+  branch_id?: string
   due_date?: string
 }
 

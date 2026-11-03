@@ -1,7 +1,8 @@
 import { ChevronRight, RefreshCw, Search, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { BranchOption, WorkerDetail, WorkersResponse } from '../api/client'
-import { createBranch, createWorker, fetchBranches, fetchWorkers } from '../api/client'
+import type { BranchOption, CrewData, WorkerDetail, WorkersResponse } from '../api/client'
+import { createBranch, createWorker, fetchBranches, fetchCrews, fetchWorkers } from '../api/client'
+import { CrewsBoard } from '../components/Crews'
 import { AttendanceStrip } from '../components/Attendance'
 import { TodayStatus } from '../components/TodayStatus'
 import { useWorkerDrawer } from '../components/WorkerDrawer'
@@ -12,15 +13,17 @@ import { EVENT_LABEL, fmtHace, initials } from '../lib/format'
 
 interface AddWorkerModalProps {
   branches: BranchOption[]
+  crews: CrewData[]
   onClose: () => void
   onSaved: () => void
 }
 
-function AddWorkerModal({ branches, onClose, onSaved }: AddWorkerModalProps) {
+function AddWorkerModal({ branches, crews, onClose, onSaved }: AddWorkerModalProps) {
   const [name, setName]       = useState('')
   const [phone, setPhone]     = useState('+521')
   const [branchId, setBranch] = useState(branches[0]?.id ?? '')
   const [title, setTitle]     = useState('')
+  const [crewId, setCrewId]   = useState('')
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState<string | null>(null)
 
@@ -32,6 +35,7 @@ function AddWorkerModal({ branches, onClose, onSaved }: AddWorkerModalProps) {
       await createWorker({
         name, phone_number: phone, branch_id: branchId,
         title: title.trim() || undefined,
+        crew_id: crewId || undefined,
       })
       onSaved()
       onClose()
@@ -83,6 +87,17 @@ function AddWorkerModal({ branches, onClose, onSaved }: AddWorkerModalProps) {
               placeholder="Albañil, Electricista, Supervisora..."
               className="mono w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
           </div>
+
+          {crews.length > 0 && (
+            <div>
+              <label htmlFor="new-worker-crew" className="label mb-1 block text-[#58423B]">Cuadrilla</label>
+              <select id="new-worker-crew" value={crewId} onChange={e => setCrewId(e.target.value)}
+                className="label w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]">
+                <option value="">Sin cuadrilla</option>
+                {crews.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
 
           {error && <p className="mono text-sm text-[#A32D2D]">Error — {error}</p>}
 
@@ -199,6 +214,10 @@ function WorkerRow({ w, onOpen }: { w: WorkerDetail; onOpen: () => void }) {
         </div>
       </td>
       <td className="px-3 py-2">{w.active ? <TodayStatus status={w.today_status} checkinAt={w.checkin_at} /> : <span className="chip chip-gray">Baja</span>}</td>
+      <td className="mono hidden px-3 py-2 text-xs xl:table-cell">
+        {w.crew_name ?? <span className="text-[#8C7169]">—</span>}
+        {w.is_lead && <span className="chip chip-orange ml-1.5">Enc.</span>}
+      </td>
       <td className="mono hidden px-3 py-2 text-xs text-[#58423B] md:table-cell">
         {w.last_event ? `${fmtHace(w.last_event.received_at)} · ${(EVENT_LABEL[w.last_event.type] ?? 'mensaje').toLowerCase()}` : 'nunca ha escrito'}
       </td>
@@ -235,12 +254,17 @@ export function Equipo() {
   const [showModal, setShowModal]             = useState(false)
   const [showBranchModal, setShowBranchModal] = useState(false)
   const [branches, setBranches]               = useState<BranchOption[]>([])
-  const { openWorker, version } = useWorkerDrawer()
+  const [crews, setCrews]                     = useState<CrewData[]>([])
+  const [tab, setTab]                         = useState<'personas' | 'cuadrillas'>('personas')
+  const { openWorker, version, bump } = useWorkerDrawer()
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setData(await fetchWorkers())
+      const [w, c, b] = await Promise.all([fetchWorkers(), fetchCrews(), fetchBranches()])
+      setData(w)
+      setCrews(c.crews)
+      setBranches(b.branches)
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error')
@@ -251,14 +275,10 @@ export function Equipo() {
 
   useEffect(() => { load() }, [load, version])
 
-  async function openModal() {
+  function openModal() {
     if (branches.length === 0) {
-      try {
-        setBranches((await fetchBranches()).branches)
-      } catch {
-        setError('No se pudieron cargar las sucursales')
-        return
-      }
+      setError('Primero crea una obra o sucursal con "+ Sucursal".')
+      return
     }
     setShowModal(true)
   }
@@ -311,6 +331,25 @@ export function Equipo() {
           </div>
         )}
 
+        <div className="flex gap-0 border-b-2 border-[#2A2622]" role="tablist" aria-label="Vista del equipo">
+          {(['personas', 'cuadrillas'] as const).map(t => (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => setTab(t)}
+              className={`hl-sm -mb-0.5 border-2 border-b-0 px-4 py-2 text-[15px] ${tab === t ? 'border-[#2A2622] bg-[#FFF8F3]' : 'border-transparent text-[#8C7169] hover:text-[#2A2622]'}`}
+            >
+              {t === 'personas' ? `Personas · ${counts.todos}` : `Cuadrillas · ${crews.length}`}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'cuadrillas' && data && (
+          <CrewsBoard crews={crews} branches={branches} workers={data.workers} onChanged={() => { load(); bump() }} />
+        )}
+
+        {tab === 'personas' && (<>
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex min-w-[220px] flex-1 items-center gap-2 border-2 border-[#2A2622] bg-[#FFF8F3] px-3 py-2 focus-within:border-[#D85A30]">
             <Search size={14} className="text-[#8C7169]" aria-hidden="true" />
@@ -360,6 +399,7 @@ export function Equipo() {
                   <th className="w-1.5 p-0"><span className="sr-only">Estado</span></th>
                   <th className="label px-3 py-2 text-left text-[#58423B]">Trabajador</th>
                   <th className="label px-3 py-2 text-left text-[#58423B]">Hoy</th>
+                  <th className="label hidden px-3 py-2 text-left text-[#58423B] xl:table-cell">Cuadrilla</th>
                   <th className="label hidden px-3 py-2 text-left text-[#58423B] md:table-cell">Último reporte</th>
                   <th className="label hidden px-3 py-2 text-left text-[#58423B] sm:table-cell">Tareas</th>
                   <th className="label hidden px-3 py-2 text-left text-[#58423B] lg:table-cell">Últimos 30 días</th>
@@ -370,7 +410,7 @@ export function Equipo() {
               {groups.map(([name, ws]) => (
                 <tbody key={name}>
                   <tr className="border-y-2 border-[#2A2622] bg-[#E5DFD3]">
-                    <td colSpan={8} className="px-3 py-1.5">
+                    <td colSpan={9} className="px-3 py-1.5">
                       <span className="font-headline text-sm font-semibold uppercase tracking-wide">{name}</span>
                       <span className="mono ml-3 text-[11px] text-[#58423B]">{groupSummary(ws)}</span>
                     </td>
@@ -381,10 +421,11 @@ export function Equipo() {
             </table>
           </div>
         )}
+        </>)}
       </main>
 
       {showModal && branches.length > 0 && (
-        <AddWorkerModal branches={branches} onClose={() => setShowModal(false)} onSaved={load} />
+        <AddWorkerModal branches={branches} crews={crews} onClose={() => setShowModal(false)} onSaved={load} />
       )}
       {showBranchModal && (
         <AddBranchModal onClose={() => setShowBranchModal(false)} onSaved={() => { setBranches([]); load() }} />

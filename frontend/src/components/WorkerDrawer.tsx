@@ -1,7 +1,8 @@
 import { MessageCircle, Plus, X } from 'lucide-react'
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { WorkerSummary } from '../api/client'
-import { deactivateWorker, fetchWorkerSummary, updateWorkerTitle } from '../api/client'
+import type { BranchOption, CrewData } from '../api/client'
+import { deactivateWorker, fetchBranches, fetchCrews, fetchWorkerSummary, updateWorker, updateWorkerTitle } from '../api/client'
 import { fmtDia, fmtHace, fmtHora, firstName, initials, waLink } from '../lib/format'
 import { AttendanceCalendar } from './Attendance'
 import { NewJobModal } from './NewJobModal'
@@ -94,6 +95,12 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
                   <p className="mono text-xs text-[#58423B]">
                     {[w.title, w.branch_name].filter(Boolean).join(' · ') || 'Sin puesto'}
                   </p>
+                  {w.crew_name && (
+                    <p className="mono text-xs text-[#58423B]">
+                      Cuadrilla {w.crew_name}
+                      {w.is_lead && <span className="chip chip-orange ml-1.5 align-middle">Encargado</span>}
+                    </p>
+                  )}
                   <p className="mono text-xs text-[#8C7169]">{w.phone_number}</p>
                 </>
               )}
@@ -184,9 +191,9 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
             </Section>
 
             {/* Tareas */}
-            <Section title="Sus tareas" aside={`${data.jobs.length} ${data.jobs.length === 1 ? 'activa' : 'activas'}`}>
+            <Section title="Sus trabajos" aside={`${data.jobs.length} ${data.jobs.length === 1 ? 'abierto' : 'abiertos'}`}>
               {data.jobs.length === 0 ? (
-                <p className="mono text-sm text-[#8C7169]">No tiene tareas abiertas.</p>
+                <p className="mono text-sm text-[#8C7169]">Ni él ni su cuadrilla tienen trabajos abiertos.</p>
               ) : (
                 <ul className="space-y-2">
                   {data.jobs.map(j => {
@@ -203,6 +210,7 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
                             ? `Terminó ${fmtDia(j.completed_at)} ${fmtHora(j.completed_at)}`
                             : j.due_date ? `Vence ${fmtDia(j.due_date)}` : 'Sin fecha'}
                           {' · '}{j.photo_count} {j.photo_count === 1 ? 'foto' : 'fotos'}
+                          {j.crew_name && ` · ${j.crew_name}`}
                         </small>
                       </li>
                     )
@@ -229,6 +237,8 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
 
             {/* Administrar */}
             <AdminSection
+              crewId={w.crew_id}
+              branchId={w.branch_id}
               workerId={w.id}
               name={w.name}
               title={w.title}
@@ -270,7 +280,9 @@ function Kpi({ value, label, tone, small }: { value: string; label: string; tone
   )
 }
 
-function AdminSection({ workerId, name, title, active, onChanged, onDeactivated }: {
+function AdminSection({ crewId, branchId, workerId, name, title, active, onChanged, onDeactivated }: {
+  crewId: string | null
+  branchId: string | null
   workerId: string
   name: string
   title: string | null
@@ -335,6 +347,7 @@ function AdminSection({ workerId, name, title, active, onChanged, onDeactivated 
           )}
         </div>
       )}
+      {active && <Placement workerId={workerId} crewId={crewId} branchId={branchId} onChanged={onChanged} />}
       {confirming && (
         <div className="space-y-2 border-2 border-[#A32D2D] bg-[#FFF8F3] p-3">
           <p className="text-sm">¿Dar de baja a <b>{name}</b>? Ya no podrá registrarse por WhatsApp. Su historial se queda.</p>
@@ -346,5 +359,60 @@ function AdminSection({ workerId, name, title, active, onChanged, onDeactivated 
       )}
       {err && <p className="mono text-xs text-[#A32D2D]">{err}</p>}
     </section>
+  )
+}
+
+/** Cuadrilla y obra del trabajador, editables desde la ficha. */
+function Placement({ workerId, crewId, branchId, onChanged }: {
+  workerId: string
+  crewId: string | null
+  branchId: string | null
+  onChanged: () => void
+}) {
+  const [crews, setCrews] = useState<CrewData[]>([])
+  const [branches, setBranches] = useState<BranchOption[]>([])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    Promise.all([fetchCrews(), fetchBranches()])
+      .then(([c, b]) => { setCrews(c.crews); setBranches(b.branches) })
+      .catch(() => setErr('No se pudieron cargar cuadrillas y obras'))
+  }, [])
+
+  async function save(data: { crew_id?: string | null; branch_id?: string | null }) {
+    setBusy(true)
+    setErr(null)
+    try {
+      await updateWorker(workerId, data)
+      onChanged()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo guardar')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const sel = 'mono mt-1 w-full border-2 border-[#2A2622] bg-white px-2 py-1.5 text-sm outline-none focus:border-[#D85A30] disabled:opacity-50'
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div>
+        <label htmlFor="worker-crew" className="label text-[#58423B]">Cuadrilla</label>
+        <select id="worker-crew" className={sel} disabled={busy} value={crewId ?? ''}
+          onChange={e => save({ crew_id: e.target.value || null })}>
+          <option value="">Sin cuadrilla</option>
+          {crews.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
+      <div>
+        <label htmlFor="worker-branch" className="label text-[#58423B]">Obra / sucursal</label>
+        <select id="worker-branch" className={sel} disabled={busy} value={branchId ?? ''}
+          onChange={e => save({ branch_id: e.target.value || null })}>
+          <option value="">Sin obra</option>
+          {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+      </div>
+      {err && <p className="mono col-span-2 text-xs text-[#A32D2D]">{err}</p>}
+    </div>
   )
 }

@@ -19,7 +19,8 @@ secundario en esta etapa.
           --fotos ~/demo_fotos/construccion
       ```
       Giros: `construccion`, `taller`, `distribuidora`, `servicios`.
-      Tu número queda como el trabajador que "no ha llegado".
+      Tu número queda como el trabajador que "no ha llegado" y como
+      **encargado** de una cuadrilla (en construcción: "Cuadrilla Cholul").
 - [ ] **Ensayo completo** (la sección 2 de principio a fin) con el celular y la
       laptop, cronometrado.
 - [ ] **Supabase despierto**: abrir el dashboard una vez (si estuvo inactivo
@@ -48,13 +49,16 @@ celular con WhatsApp.
    El bot te contesta y en segundos el panel cambia (se actualiza solo).
    Mensaje clave: *el trabajador no instala nada; ya sabe usar WhatsApp.*
 
-4. **Tarea con prueba (4 min).**
-   En **Tareas**, en tu tarea ("Armado de castillos fachada" en construcción),
-   toca **Que el bot pregunte**. Te llegan botones: aprieta **Ya terminé**, el bot
-   pide foto, manda una. La tarea pasa a **Por revisar** con la foto.
-   Que el dueño la **apruebe** él mismo. Mensaje clave: *ya no es "dice que ya
-   quedó": es foto y visto bueno.*
-   (En la tarjeta "Por revisar" que ya existe puedes mostrar antes/después.)
+4. **Trabajo de cuadrilla con prueba (4 min).**
+   Primero **Equipo → Cuadrillas**: "Tú no le dices a cada quien qué hacer; le
+   mandas el trabajo a la cuadrilla y el encargado te reporta."
+   Luego en **Tareas**, en el trabajo de tu cuadrilla ("Armado de castillos
+   fachada" en construcción), toca **Que el bot pregunte**. Como encargado te
+   llegan botones: aprieta **Ya terminé**, el bot pide foto, manda una. El
+   trabajo pasa a **Por revisar** con la foto. Que el dueño lo **apruebe** él
+   mismo. Mensaje clave: *ya no es "dice que ya quedó": es foto y visto bueno.*
+   (Si la cuadrilla tuviera varios trabajos abiertos, el bot pregunta de cuál
+   es la foto con botones.)
 
 5. **Ficha del trabajador (2 min).**
    Pica a alguien en **Equipo**: 30 días de asistencia, a qué hora llega en
@@ -104,6 +108,9 @@ Anota las respuestas tal cual las dice (sus palabras sirven para la landing).
 1. ¿Cuántos trabajadores tienes en campo? ¿En cuántas obras/sucursales?
 2. ¿A qué hora entra tu gente? ¿Es igual en todas las obras? ¿Cuánta tolerancia das?
 3. ¿Quién te reporta hoy cómo va el trabajo y cómo (llamadas, WhatsApp, fotos, Excel)?
+3b. ¿Le dices a cada quien qué hacer o mandas a la cuadrilla a un trabajo? ¿Cuántas
+    cuadrillas tienes y quién es el encargado de cada una? ¿Una cuadrilla se mueve
+    entre obras?
 4. ¿Todos tus trabajadores tienen WhatsApp? ¿Celular propio?
 
 **Dolor**

@@ -87,7 +87,10 @@ export function Tareas() {
       .map(j => (new Date(j.closed_at!).getTime() - new Date(j.created_at).getTime()) / DAY_MS)
     const avg = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : null
     const overdueBy = new Map<string, number>()
-    for (const j of filtered) if (j.overdue && j.worker_name) overdueBy.set(j.worker_name, (overdueBy.get(j.worker_name) ?? 0) + 1)
+    for (const j of filtered) {
+      const who = j.crew_name ?? j.worker_name
+      if (j.overdue && who) overdueBy.set(who, (overdueBy.get(who) ?? 0) + 1)
+    }
     const worst = [...overdueBy.entries()].sort((a, b) => b[1] - a[1])[0] ?? null
     return { closedWeek: closedWeek.length, onTime, avg, worst }
   }, [filtered, weekAgo, now])
@@ -104,7 +107,7 @@ export function Tareas() {
           </p>
         </div>
         <div className="ml-auto flex gap-2">
-          <button onClick={() => setShowModal(true)} className="btn btn-primary">+ Nueva tarea</button>
+          <button onClick={() => setShowModal(true)} className="btn btn-primary">+ Nuevo trabajo</button>
           <button onClick={load} disabled={loading} className="btn" aria-label="Actualizar">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -232,20 +235,23 @@ function JobCard({ job: j, column, onChanged, onPhoto }: {
 
   const photos = j.photos
   const shown = column === 'por_revisar' ? photos.slice(-2) : []
-  const n = firstName(j.worker_name)
+  const n = firstName(j.contact_name)
 
   return (
     <article className={`space-y-2 border-2 border-[#2A2622] bg-[#FFF8F3] p-3 ${column === 'terminadas' ? 'opacity-90' : ''}`}>
       <p className="font-semibold leading-snug">{j.title}</p>
 
-      {j.worker_name ? (
-        <button className="group flex items-center gap-2 text-left" onClick={() => j.worker_id && openWorker(j.worker_id)}>
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center border border-[#2A2622] bg-[#ECE1D3] font-headline text-[10px] font-semibold">
-            {initials(j.worker_name)}
+      {j.crew_name || j.worker_name ? (
+        <button className="group flex w-full min-w-0 items-center gap-2 text-left" onClick={() => j.contact_id && openWorker(j.contact_id)}
+          title={j.contact_name ? `Ver ficha de ${j.contact_name}` : undefined}>
+          <span className={`flex h-7 w-7 shrink-0 items-center justify-center border border-[#2A2622] font-headline text-[10px] font-semibold ${j.crew_name ? 'bg-[#2A2622] text-white' : 'bg-[#ECE1D3]'}`}>
+            {initials(j.crew_name ?? j.worker_name ?? '')}
           </span>
-          <span className="min-w-0 leading-tight">
-            <span className="block text-[13px] font-medium group-hover:text-[#D85A30]">{j.worker_name}</span>
-            {j.branch_name && <span className="mono block truncate text-[10.5px] text-[#8C7169]">{j.branch_name}</span>}
+          <span className="min-w-0 flex-1 leading-tight">
+            <span className="block truncate text-[13px] font-medium group-hover:text-[#D85A30]">{j.crew_name ?? j.worker_name}</span>
+            <span className="mono block truncate text-[10.5px] text-[#8C7169]">
+              {[j.crew_name && (j.contact_name ? `enc. ${j.contact_name}` : 'sin encargado'), j.branch_name].filter(Boolean).join(' · ')}
+            </span>
           </span>
         </button>
       ) : (
@@ -259,14 +265,14 @@ function JobCard({ job: j, column, onChanged, onPhoto }: {
               key={p.id}
               url={p.url}
               label={shown.length > 1 ? `${i === 0 ? 'Antes' : 'Después'} · ${fmtDia(p.received_at)}` : fmtCuando(p.received_at)}
-              onOpen={() => onPhoto({ url: p.url, title: j.title, subtitle: `${j.worker_name ?? ''} · ${fmtCuando(p.received_at)}` })}
+              onOpen={() => onPhoto({ url: p.url, title: j.title, subtitle: `${j.assignee} · ${fmtCuando(p.received_at)}` })}
             />
           ))}
         </div>
       )}
       {column === 'por_revisar' && photos.length === 0 && (
         <p className="mono border border-dashed border-[#8C7169] bg-[#F2EDE4] px-2 py-1 text-[11px] text-[#58423B]">
-          Todavía no manda la foto. El bot ya se la pidió.
+          Todavía no mandan la foto. El bot ya la pidió.
         </p>
       )}
 
@@ -334,17 +340,17 @@ function JobCard({ job: j, column, onChanged, onPhoto }: {
 
       {(column === 'atrasadas' || column === 'en_curso') && (
         <div className="flex flex-wrap gap-1.5">
-          {j.worker_phone && (
-            <a className="btn btn-wa btn-sm" href={waLink(j.worker_phone, `Hola ${n}, ¿cómo va *${j.title}*? Mándame foto del avance.`)} target="_blank" rel="noreferrer">
+          {j.contact_phone && (
+            <a className="btn btn-wa btn-sm" href={waLink(j.contact_phone, `Hola ${n}, ¿cómo va *${j.title}*? Mándame foto del avance.`)} target="_blank" rel="noreferrer">
               <MessageCircle size={12} /> Escribirle
             </a>
           )}
-          {j.worker_id && (
+          {j.contact_id && (
             <button
               className="btn btn-sm"
               disabled={busy}
               title="El bot le manda la tarea con botones: Ya terminé / Sigo en eso / Tengo un problema"
-              onClick={() => run(() => remindJob(j.id), 'El bot ya le preguntó.')}
+              onClick={() => run(() => remindJob(j.id), `El bot ya le preguntó a ${n}.`)}
             >
               <Bot size={12} /> Que el bot pregunte
             </button>

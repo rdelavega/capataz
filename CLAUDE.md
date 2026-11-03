@@ -119,6 +119,15 @@ WhatsApp (trabajador)
   WhatsApp usan las mismas para contar lo mismo.
 - **Tarea terminada = foto + visto bueno**: "Ya terminé" deja la tarea en
   `por_revisar`, el bot pide foto, y solo el dueño la pasa a `completado`.
+- **Los trabajos son de la cuadrilla, no de una persona** (decisión 2026-11-02):
+  el dueño manda "Fumigar casa García" a una cuadrilla (`crews`), no reparte
+  tareas individuales. Obra/sucursal (`branches`) = lugar; cuadrilla = equipo
+  con encargado (`lead_worker_id`); una obra puede tener varias cuadrillas y
+  una cuadrilla puede moverse entre obras. El bot habla con el encargado
+  (`Snapshot.contact()`); cualquier integrante manda fotos. Si la cuadrilla
+  tiene varios trabajos abiertos, el bot pregunta de cuál es la foto
+  (payload `foto::<event>::<job>`). Asignar a una persona sigue existiendo como
+  excepción.
 - **Hora de entrada**: `WORKDAY_START` (08:00) + `LATE_TOLERANCE_MINUTES`
   (10). Check-in después = `tarde`. `REST_WEEKDAYS` (domingo) no cuenta faltas.
 - **Escribirle a un trabajador desde el dashboard = link `wa.me`** desde el

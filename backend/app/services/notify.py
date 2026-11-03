@@ -127,11 +127,7 @@ def summary_params(s: Snapshot) -> list[str]:
     done_today = [j for j in s.jobs if j.status in ("por_revisar", "completado")
                   and j.completed_at and j.completed_at.astimezone(s.now.tzinfo).date() == s.today]
     review = [j for j in s.jobs if j.status == "por_revisar"]
-    workers = {w.id: w for w in s.workers}
-    overdue = [
-        f"{j.title} ({workers[j.worker_id].name})" if j.worker_id in workers else j.title
-        for j in s.jobs if job_is_overdue(j, s.today)
-    ]
+    overdue = [f"{j.title} ({s.who(j)})" for j in s.jobs if job_is_overdue(j, s.today)]
 
     def cap(items: list[str], n: int = 3) -> str:
         if not items:

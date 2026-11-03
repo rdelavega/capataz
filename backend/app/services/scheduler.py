@@ -66,17 +66,17 @@ async def run_checkin_reminders(session: AsyncSession, company_id: uuid.UUID) ->
 
 async def run_job_progress(session: AsyncSession, company_id: uuid.UUID) -> int:
     s = await insights.load_snapshot(session, company_id)
-    workers = {w.id: w for w in s.workers}
     sent = 0
     for j in s.jobs:
-        if j.status not in ("pendiente", "en_progreso", "atrasado") or j.worker_id not in workers:
+        contact = s.contact(j)  # la persona asignada o el encargado de la cuadrilla
+        if j.status not in ("pendiente", "en_progreso", "atrasado") or contact is None:
             continue
         if j.due_date is None or j.due_date > s.today:
             continue
         if any(to_local(p.received_at).date() == s.today for p in s.photos_by_job.get(j.id, [])):
             continue
         try:
-            await notify.job_progress(session, company_id, j, workers[j.worker_id], s.today)
+            await notify.job_progress(session, company_id, j, contact, s.today)
             sent += 1
         except notify.NoWindow:
             continue

@@ -18,6 +18,9 @@ class Job(Base):
     company_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
     branch_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("branches.id", ondelete="SET NULL"))
     worker_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("workers.id", ondelete="SET NULL"))
+    # Lo normal: el trabajo es de una cuadrilla (worker_id vacío). worker_id es opcional
+    # para cuando el dueño sí quiere encargárselo a una persona.
+    crew_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("crews.id", ondelete="SET NULL"))
     title: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(String)
     status: Mapped[str] = mapped_column(JobStatus, nullable=False, default="pendiente")

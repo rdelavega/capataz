@@ -39,6 +39,8 @@ _unregistered_replied: dict[str, date] = {}
 JOB_BUTTON_STATUSES = {"completado", "en_progreso", "atrasado"}
 BUTTON_CHECKIN = "checkin"
 BUTTON_ABSENT = "ausente"
+# "foto::<event_id>::<job_id>": el trabajador eligió a qué trabajo pertenece una foto.
+PHOTO_CHOICE = "foto"
 
 # Una foto que llega dentro de esta ventana después de "Terminé" es la evidencia de esa tarea.
 REVIEW_PHOTO_WINDOW = timedelta(hours=6)
@@ -66,6 +68,8 @@ def _button_payload(msg: dict) -> str | None:
         interactive = msg.get("interactive", {})
         if interactive.get("type") == "button_reply":
             return interactive.get("button_reply", {}).get("id")
+        if interactive.get("type") == "list_reply":
+            return interactive.get("list_reply", {}).get("id")
     if msg.get("type") == "button":
         return msg.get("button", {}).get("payload")
     return None
@@ -103,9 +107,9 @@ async def _handle_job_button(session, worker: Worker, nombre: str, payload: str)
         logger.warning("invalid job_id in button payload: %s", payload)
         return None
 
-    job = (await session.execute(
-        select(Job).where(Job.id == job_uuid, Job.worker_id == worker.id)
-    )).scalar_one_or_none()
+    job = (await session.execute(select(Job).where(Job.id == job_uuid))).scalar_one_or_none()
+    if job is not None and not _can_report(worker, job):
+        job = None
     if job is None:
         logger.warning("job %s not found for worker %s", job_id_str, worker.id)
         return None
@@ -129,17 +133,67 @@ async def _handle_job_button(session, worker: Worker, nombre: str, payload: str)
     return f"🚫 Anotado, {nombre}. Ya le avisé a tu jefe que tienes un problema con *{job.title}*."
 
 
-async def _link_photo_to_job(session, worker: Worker, now: datetime) -> Job | None:
-    """
-    Decide a qué tarea pertenece una foto:
-    1. La tarea que el trabajador acaba de marcar como terminada (por_revisar reciente).
-    2. Si solo tiene una tarea abierta, esa (evidencia de avance).
-    """
-    jobs = (await session.execute(
-        select(Job).where(
-            Job.worker_id == worker.id,
-            Job.status.in_(("por_revisar", *OPEN_STATUSES)),
+def _can_report(worker: Worker, job: Job) -> bool:
+    """El trabajo es suyo, o es de su cuadrilla (sin persona asignada)."""
+    if job.worker_id == worker.id:
+        return True
+    return bool(worker.crew_id and job.crew_id == worker.crew_id and not job.worker_id)
+
+
+def _short(title: str, n: int) -> str:
+    return title if len(title) <= n else title[: n - 1] + "…"
+
+
+async def _ask_which_job(phone: str, event_id: uuid.UUID, jobs: list[Job]) -> None:
+    """Varios trabajos abiertos: el trabajador elige con un toque de cuál es la foto."""
+    jobs = sorted(jobs, key=lambda j: (j.due_date is None, j.due_date))
+    body = "📸 Foto recibida. ¿De cuál trabajo es?"
+    if len(jobs) <= 3:
+        listado = "\n".join(f"{i + 1}. {j.title}" for i, j in enumerate(jobs))
+        await whatsapp.send_interactive_buttons(
+            phone, f"{body}\n\n{listado}",
+            [{"type": "reply", "reply": {"id": f"{PHOTO_CHOICE}::{event_id}::{j.id}",
+                                         "title": _short(f"{i + 1}. {j.title}", 20)}}
+             for i, j in enumerate(jobs)],
         )
+    else:
+        await whatsapp.send_interactive_list(
+            phone, body, "Elegir trabajo",
+            [{"id": f"{PHOTO_CHOICE}::{event_id}::{j.id}", "title": _short(j.title, 24),
+              "description": _short(j.title, 72) if len(j.title) > 24 else ""}
+             for j in jobs[:10]],
+        )
+
+
+async def _handle_photo_choice(session, worker: Worker, payload: str) -> str | None:
+    """El trabajador eligió el trabajo de una foto que mandó antes."""
+    _, event_str, job_str = (payload.split("::") + ["", ""])[:3]
+    try:
+        photo_id, job_id = uuid.UUID(event_str), uuid.UUID(job_str)
+    except ValueError:
+        return None
+    photo = await session.get(Event, photo_id)
+    job = (await session.execute(select(Job).where(Job.id == job_id))).scalar_one_or_none()
+    if photo is None or job is None or photo.worker_id != worker.id or not _can_report(worker, job):
+        return None
+    photo.job_id = job.id
+    if job.status == "pendiente":
+        job.status = "en_progreso"
+    return f"👍 Listo, la foto quedó en *{job.title}*."
+
+
+async def _link_photo_to_job(session, worker: Worker, now: datetime) -> tuple[Job | None, list[Job]]:
+    """
+    Decide a qué trabajo pertenece una foto. Devuelve (trabajo, opciones):
+    1. El que el trabajador (o su cuadrilla) acaba de marcar como terminado.
+    2. Si solo hay uno abierto, ese (evidencia de avance).
+    3. Si hay varios, ninguno: se regresan las opciones para preguntarle.
+    """
+    mine = Job.worker_id == worker.id
+    if worker.crew_id:
+        mine = mine | ((Job.crew_id == worker.crew_id) & Job.worker_id.is_(None))
+    jobs = (await session.execute(
+        select(Job).where(mine, Job.status.in_(("por_revisar", *OPEN_STATUSES)))
     )).scalars().all()
 
     in_review = [
@@ -147,15 +201,15 @@ async def _link_photo_to_job(session, worker: Worker, now: datetime) -> Job | No
         if j.status == "por_revisar" and j.completed_at and now - j.completed_at <= REVIEW_PHOTO_WINDOW
     ]
     if in_review:
-        return max(in_review, key=lambda j: j.completed_at)
+        return max(in_review, key=lambda j: j.completed_at), []
 
     open_jobs = [j for j in jobs if j.status in OPEN_STATUSES]
     if len(open_jobs) == 1:
         job = open_jobs[0]
         if job.status == "pendiente":
             job.status = "en_progreso"
-        return job
-    return None
+        return job, []
+    return None, open_jobs
 
 
 async def process_event(event_id: uuid.UUID) -> None:
@@ -208,6 +262,7 @@ async def _process(event_id: uuid.UUID, session) -> None:
     reply: str | None = None
     already_replied = False
     marked_absent = False
+    ask_choices: list[Job] = []
 
     if msg_type == "text":
         text_content = msg.get("text", {}).get("body", "")
@@ -256,6 +311,11 @@ async def _process(event_id: uuid.UUID, session) -> None:
             event_type = "checkin"
         elif payload == BUTTON_ABSENT:
             marked_absent = True
+        elif payload.startswith(f"{PHOTO_CHOICE}::"):
+            choice_reply = await _handle_photo_choice(session, worker, payload)
+            if choice_reply:
+                reply = choice_reply
+                already_replied = True
         else:
             job_reply = await _handle_job_button(session, worker, nombre, payload)
             if job_reply:
@@ -318,8 +378,10 @@ async def _process(event_id: uuid.UUID, session) -> None:
             reply = f"👍 Ya tenías registro de hoy, {nombre}."
 
     elif event_type == "photo":
-        job = await _link_photo_to_job(session, worker, now)
-        if job is not None:
+        job, choices = await _link_photo_to_job(session, worker, now)
+        if choices:
+            ask_choices = choices
+        elif job is not None:
             event.job_id = job.id
             if job.status == "por_revisar":
                 reply = f"📸 Foto recibida para *{job.title}*. Ya le avisé a tu jefe para que la apruebe."
@@ -334,6 +396,11 @@ async def _process(event_id: uuid.UUID, session) -> None:
         reply = _ack_reply(event_type, nombre, has_checkin=attendance is not None)
 
     await session.commit()
+    if ask_choices:
+        try:
+            await _ask_which_job(phone_number, event_id, ask_choices)
+        except Exception as e:
+            logger.error("event %s: failed to ask which job: %s", event_id, e)
     if reply:
         await _safe_send(event_id, phone_number, reply)
     logger.info("event %s: processed as %s for worker %s", event_id, event_type, worker.name)

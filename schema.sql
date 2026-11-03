@@ -30,6 +30,17 @@ CREATE TABLE branches (
 
 -- ─── WORKERS ──────────────────────────────────────────────────────────────────
 
+-- ─── crews: cuadrillas (equipos con encargado). Una obra puede tener varias ──
+
+CREATE TABLE crews (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id      UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    branch_id       UUID REFERENCES branches(id) ON DELETE SET NULL,  -- obra habitual
+    name            TEXT NOT NULL,
+    lead_worker_id  UUID,             -- FK a workers, se agrega abajo
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE workers (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id   UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -37,6 +48,7 @@ CREATE TABLE workers (
     name         TEXT NOT NULL,
     phone_number TEXT NOT NULL,           -- E.164, e.g. +5215512345678
     title        TEXT,                    -- puesto (Albañil, Electricista…)
+    crew_id      UUID REFERENCES crews(id) ON DELETE SET NULL,
     active       BOOLEAN NOT NULL DEFAULT TRUE,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (company_id, phone_number)
@@ -48,7 +60,8 @@ CREATE TABLE jobs (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id   UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     branch_id    UUID REFERENCES branches(id) ON DELETE SET NULL,
-    worker_id    UUID REFERENCES workers(id) ON DELETE SET NULL,
+    worker_id    UUID REFERENCES workers(id) ON DELETE SET NULL,  -- opcional
+    crew_id      UUID REFERENCES crews(id) ON DELETE SET NULL,    -- lo normal
     title        TEXT NOT NULL,
     description  TEXT,
     status       job_status NOT NULL DEFAULT 'pendiente',
@@ -133,6 +146,10 @@ CREATE TABLE scheduled_runs (
     ran_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (kind, run_date)
 );
+
+ALTER TABLE crews ADD CONSTRAINT crews_lead_fk
+    FOREIGN KEY (lead_worker_id) REFERENCES workers(id) ON DELETE SET NULL;
+CREATE INDEX idx_jobs_crew ON jobs (crew_id);
 
 -- ─── updated_at trigger ───────────────────────────────────────────────────────
 

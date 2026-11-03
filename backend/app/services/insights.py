@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.attendance import AttendanceDaily
 from app.models.branch import Branch
+from app.models.crew import Crew
 from app.models.event import Event
 from app.models.job import Job
 from app.models.notification import Notification
@@ -87,10 +88,38 @@ class Snapshot:
     photos_by_job: dict[uuid.UUID, list[Event]]
     events_today: list[Event]
     last_event: dict[uuid.UUID, Event]
+    crews: dict[uuid.UUID, Crew] = field(default_factory=dict)
     reminders_today: dict[tuple[str, uuid.UUID | None], datetime] = field(default_factory=dict)
 
     def worker_start(self, w: Worker) -> date:
         return to_local(w.created_at).date() if w.created_at else self.today - timedelta(days=365)
+
+    def worker(self, wid: uuid.UUID | None) -> Worker | None:
+        return next((w for w in self.workers if w.id == wid), None) if wid else None
+
+    def contact(self, j: Job) -> Worker | None:
+        """Con quién habla el bot sobre un trabajo: la persona asignada o el encargado de la cuadrilla."""
+        if j.worker_id:
+            return self.worker(j.worker_id)
+        crew = self.crews.get(j.crew_id) if j.crew_id else None
+        return self.worker(crew.lead_worker_id) if crew else None
+
+    def who(self, j: Job) -> str:
+        """'Luis Pech', 'Cuadrilla Norte (enc. Jorge Canché)' o 'Sin asignar'."""
+        if j.worker_id and (w := self.worker(j.worker_id)):
+            return w.name
+        crew = self.crews.get(j.crew_id) if j.crew_id else None
+        if crew:
+            lead = self.worker(crew.lead_worker_id)
+            return f"{crew.name} (enc. {lead.name})" if lead else crew.name
+        return "Sin asignar"
+
+    def jobs_of(self, w: Worker) -> list[Job]:
+        """Trabajos de una persona: los suyos y los de su cuadrilla sin persona asignada."""
+        return [
+            j for j in self.jobs
+            if j.worker_id == w.id or (w.crew_id and j.crew_id == w.crew_id and not j.worker_id)
+        ]
 
     def codes(self, w: Worker, days: list[date]) -> list[str]:
         recs = self.attendance.get(w.id, {})
@@ -121,6 +150,9 @@ async def load_snapshot(session: AsyncSession, company_id: uuid.UUID) -> Snapsho
         attendance[a.worker_id][a.work_date] = a
 
     jobs = list((await session.execute(select(Job).where(Job.company_id == company_id))).scalars())
+    crews = {
+        c.id: c for c in (await session.execute(select(Crew).where(Crew.company_id == company_id))).scalars()
+    }
 
     photos_by_job: dict[uuid.UUID, list[Event]] = defaultdict(list)
     for e in (await session.execute(
@@ -158,7 +190,7 @@ async def load_snapshot(session: AsyncSession, company_id: uuid.UUID) -> Snapsho
     return Snapshot(
         today=today, now=now, branches=branches, workers=workers, attendance=attendance,
         jobs=jobs, photos_by_job=photos_by_job, events_today=events_today,
-        last_event=last_event, reminders_today=reminders,
+        last_event=last_event, crews=crews, reminders_today=reminders,
     )
 
 
@@ -169,7 +201,6 @@ SEVERITY_ORDER = {"urgent": 0, "review": 1, "warn": 2}
 
 def attention_items(s: Snapshot) -> list[dict]:
     items: list[dict] = []
-    worker_by_id = {w.id: w for w in s.workers}
     branch_name = lambda bid: s.branches[bid].name if bid in s.branches else "Sin sucursal"  # noqa: E731
 
     # 1. No ha llegado / avisó que no viene
@@ -201,9 +232,9 @@ def attention_items(s: Snapshot) -> list[dict]:
 
     # 2. Tareas atrasadas y que vencen hoy sin foto
     for j in s.jobs:
-        w = worker_by_id.get(j.worker_id) if j.worker_id else None
+        w = s.contact(j)
         photos = s.photos_by_job.get(j.id, [])
-        who = w.name if w else "Sin asignar"
+        who = s.who(j)
         if job_is_overdue(j, s.today):
             detail = [who, branch_name(j.branch_id), f"{len(photos)} foto{'s' if len(photos) != 1 else ''}"]
             asked = s.reminders_today.get(("job_progress", j.id))
@@ -235,9 +266,8 @@ def attention_items(s: Snapshot) -> list[dict]:
     if review:
         parts = []
         for j in review[:3]:
-            w = worker_by_id.get(j.worker_id) if j.worker_id else None
             when = fmt_hora(j.completed_at) if j.completed_at else ""
-            parts.append(f"{j.title} ({w.name if w else 'sin asignar'}{', ' + when if when else ''})")
+            parts.append(f"{j.title} ({s.who(j)}{', ' + when if when else ''})")
         if len(review) > 3:
             parts.append(f"y {len(review) - 3} más")
         n = len(review)
@@ -439,13 +469,17 @@ def worker_row(s: Snapshot, w: Worker) -> dict:
     days = _date_range(s.today, HISTORY_DAYS)
     codes = s.codes(w, days)
     rec = s.attendance.get(w.id, {}).get(s.today)
-    wjobs = [j for j in s.jobs if j.worker_id == w.id]
+    wjobs = s.jobs_of(w)
     last = s.last_event.get(w.id)
+    crew = s.crews.get(w.crew_id) if w.crew_id else None
     return {
         "id": str(w.id), "name": w.name, "phone_number": w.phone_number, "title": w.title,
         "branch_id": str(w.branch_id) if w.branch_id else None,
         "branch_name": s.branches[w.branch_id].name if w.branch_id in s.branches else None,
         "active": w.active,
+        "crew_id": str(crew.id) if crew else None,
+        "crew_name": crew.name if crew else None,
+        "is_lead": bool(crew and crew.lead_worker_id == w.id),
         "today_status": rec.status if rec else None,
         "checkin_at": rec.checkin_at.isoformat() if rec and rec.checkin_at else None,
         "last_event": {"type": last.event_type, "received_at": last.received_at.isoformat()} if last else None,
@@ -464,7 +498,7 @@ def worker_summary(s: Snapshot, w: Worker, events_today: list[Event], photos: li
     recs = s.attendance.get(w.id, {})
     checkins = [r.checkin_at for d, r in recs.items() if d in days and r.checkin_at]
     since = s.today - timedelta(days=HISTORY_DAYS - 1)
-    wjobs = [j for j in s.jobs if j.worker_id == w.id]
+    wjobs = s.jobs_of(w)
     done_30 = [j for j in wjobs if (c := job_closed_at(j)) and to_local(c).date() >= since]
     jobs_by_id = {j.id: j for j in wjobs}
 
@@ -511,8 +545,16 @@ def worker_summary(s: Snapshot, w: Worker, events_today: list[Event], photos: li
 def job_card(s: Snapshot, j: Job) -> dict:
     photos = s.photos_by_job.get(j.id, [])
     asked = s.reminders_today.get(("job_progress", j.id))
+    contact = s.contact(j)
+    crew = s.crews.get(j.crew_id) if j.crew_id else None
     return {
         "id": str(j.id), "title": j.title, "status": j.status,
+        "crew_id": str(crew.id) if crew else None,
+        "crew_name": crew.name if crew else None,
+        "assignee": s.who(j),
+        "contact_id": str(contact.id) if contact else None,
+        "contact_name": contact.name if contact else None,
+        "contact_phone": contact.phone_number if contact else None,
         "due_date": j.due_date.isoformat() if j.due_date else None,
         "overdue": job_is_overdue(j, s.today),
         "completed_at": j.completed_at.isoformat() if j.completed_at else None,

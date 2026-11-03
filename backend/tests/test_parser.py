@@ -11,7 +11,7 @@ from app.models.event import Event
 from app.models.job import Job
 from app.services import parser
 
-WORKER = SimpleNamespace(id=uuid.uuid4(), name="Luis Pech")
+WORKER = SimpleNamespace(id=uuid.uuid4(), name="Luis Pech", crew_id=None)
 
 
 class FakeResult:
@@ -121,7 +121,8 @@ def _button(msg_id: str, payload: str) -> dict:
 
 
 def _job(status: str = "en_progreso", **kw) -> Job:
-    return Job(id=uuid.uuid4(), title="Colado de losa", status=status, worker_id=WORKER.id, **kw)
+    kw.setdefault("worker_id", WORKER.id)
+    return Job(id=uuid.uuid4(), title="Colado de losa", status=status, **kw)
 
 
 def test_terminado_queda_por_revisar_y_pide_foto(sent) -> None:
@@ -193,3 +194,65 @@ def test_numero_no_registrado_solo_recibe_una_respuesta_al_dia(sent) -> None:
     _run(_event(_payload(_text("wamid.1", "hola")), "wamid.1"), worker=None)
     _run(_event(_payload(_text("wamid.2", "hola?")), "wamid.2"), worker=None)
     assert sent.await_count == 1
+
+
+# ─── Cuadrillas ───────────────────────────────────────────────────────────────
+
+CREW_ID = uuid.uuid4()
+MEMBER = SimpleNamespace(id=uuid.uuid4(), name="Manuel Chan", crew_id=CREW_ID)
+
+
+def _photo_msg() -> dict:
+    return {"id": "wamid.9", "from": "5219991234567", "type": "image", "image": {"id": "m1"}}
+
+
+@pytest.fixture
+def media(monkeypatch):
+    monkeypatch.setattr(parser.whatsapp, "download_media", AsyncMock(return_value=b"jpg"))
+    monkeypatch.setattr(parser.storage, "upload_to_r2", lambda *a: "https://r2/x.jpg")
+
+
+def test_encargado_termina_trabajo_de_su_cuadrilla(sent) -> None:
+    job = _job(worker_id=None, crew_id=CREW_ID)
+    _run(_event(_payload(_button("wamid.1", f"completado::{job.id}")), "wamid.1"), worker=MEMBER, extra=[job])
+    assert job.status == "por_revisar"
+
+
+def test_no_puede_terminar_trabajo_de_otra_cuadrilla(sent) -> None:
+    job = _job(worker_id=None, crew_id=uuid.uuid4())
+    _run(_event(_payload(_button("wamid.1", f"completado::{job.id}")), "wamid.1"), worker=MEMBER, extra=[job])
+    assert job.status == "en_progreso"
+
+
+def test_foto_de_integrante_va_al_unico_trabajo_de_la_cuadrilla(sent, media) -> None:
+    job = _job("pendiente", worker_id=None, crew_id=CREW_ID)
+    event = _event(_payload(_photo_msg()), "wamid.9")
+    _run(event, worker=MEMBER, attendance=AttendanceDaily(status="presente"), after=[[job]])
+    assert event.job_id == job.id and job.status == "en_progreso"
+
+
+def test_varios_trabajos_abiertos_pregunta_de_cual_es(sent, media, monkeypatch) -> None:
+    ask = AsyncMock()
+    monkeypatch.setattr(parser.whatsapp, "send_interactive_buttons", ask)
+    jobs = [_job(worker_id=None, crew_id=CREW_ID), _job("pendiente", worker_id=None, crew_id=CREW_ID)]
+    event = _event(_payload(_photo_msg()), "wamid.9")
+    _run(event, worker=MEMBER, attendance=AttendanceDaily(status="presente"), after=[jobs])
+    assert event.job_id is None
+    buttons = ask.await_args.args[2]
+    assert [b["reply"]["id"] for b in buttons] == [f"foto::{event.id}::{j.id}" for j in jobs]
+    assert all(len(b["reply"]["title"]) <= 20 for b in buttons)
+    sent.assert_not_awaited()  # la pregunta es la respuesta; no hay acuse aparte
+
+
+def test_elegir_trabajo_liga_la_foto(sent) -> None:
+    job = _job("pendiente", worker_id=None, crew_id=CREW_ID)
+    photo = Event(id=uuid.uuid4(), worker_id=MEMBER.id, event_type="photo",
+                  whatsapp_message_id="wamid.9", raw_payload={})
+    choice = {"id": "wamid.10", "from": "5219991234567", "type": "interactive",
+              "interactive": {"type": "button_reply", "button_reply": {"id": f"foto::{photo.id}::{job.id}", "title": "1. Colado"}}}
+    event = _event(_payload(choice), "wamid.10")
+    session = FakeSession(event, MEMBER, AttendanceDaily(status="presente"), extra=[job])
+    session.get = AsyncMock(side_effect=lambda model, id_: event if id_ == event.id else photo)
+    asyncio.run(parser._process(event.id, session))
+    assert photo.job_id == job.id
+    assert job.title in sent.await_args.args[1]
