@@ -45,7 +45,7 @@ async def verify_webhook(
     hub_challenge: str = Query(alias="hub.challenge"),
 ) -> Response:
     """Verificación del webhook por Meta. Devuelve el challenge si el token es correcto."""
-    if hub_mode == "subscribe" and hub_verify_token == settings.whatsapp_verify_token:
+    if hub_mode == "subscribe" and hmac.compare_digest(hub_verify_token, settings.whatsapp_verify_token):
         return Response(content=hub_challenge, media_type="text/plain")
     raise HTTPException(status_code=403, detail="Token de verificación inválido")
 

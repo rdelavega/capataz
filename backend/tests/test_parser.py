@@ -83,6 +83,7 @@ def test_batch_processes_its_own_message(sent) -> None:
 
 
 def test_unregistered_number_gets_reply(sent) -> None:
+    parser._unregistered_replied.clear()
     _run(_event(_payload(_text("wamid.1", "hola")), "wamid.1"), worker=None)
     sent.assert_awaited_once_with("+5219991234567", parser.UNREGISTERED_REPLY)
 
@@ -185,3 +186,10 @@ def test_boton_hoy_no_voy_marca_ausente(sent) -> None:
     session = _run(_event(_payload(msg), "wamid.1"))
     att = next(o for o in session.added if isinstance(o, AttendanceDaily))
     assert att.status == "ausente"
+
+
+def test_numero_no_registrado_solo_recibe_una_respuesta_al_dia(sent) -> None:
+    parser._unregistered_replied.clear()
+    _run(_event(_payload(_text("wamid.1", "hola")), "wamid.1"), worker=None)
+    _run(_event(_payload(_text("wamid.2", "hola?")), "wamid.2"), worker=None)
+    assert sent.await_count == 1

@@ -5,7 +5,7 @@ tareas).
 """
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -30,6 +30,10 @@ CHECKIN_KEYWORDS = {
     "presente", "buenos días", "buen día", "buenos dias", "buen dia",
     "ya llegué", "ya llegue", "checkin", "check in",
 }
+
+# Números no registrados ya respondidos hoy. Cada respuesta cuesta dinero: sin
+# esto, cualquiera podría escribirle al bot sin parar y generar cargos.
+_unregistered_replied: dict[str, date] = {}
 
 # Botones que mandan los mensajes del bot: "<estado>::<job_id>" o una acción simple.
 JOB_BUTTON_STATUSES = {"completado", "en_progreso", "atrasado"}
@@ -185,7 +189,9 @@ async def _process(event_id: uuid.UUID, session) -> None:
     worker = result.scalar_one_or_none()
     if worker is None:
         logger.warning("event %s: worker not found for phone %s", event_id, phone_number)
-        await _safe_send(event_id, phone_number, UNREGISTERED_REPLY)
+        if _unregistered_replied.get(phone_number) != local_today():
+            _unregistered_replied[phone_number] = local_today()
+            await _safe_send(event_id, phone_number, UNREGISTERED_REPLY)
         return
 
     nombre = worker.name.split()[0]

@@ -210,6 +210,7 @@ def test_secret_key_por_defecto_no_arranca_en_railway(monkeypatch) -> None:
     with pytest.raises(ValueError, match="SECRET_KEY"):
         Settings(secret_key=DEV_SECRET_KEY)
     assert Settings(secret_key="x" * 48).secret_key == "x" * 48
+    assert Settings(secret_key="corta").secret_key == "corta"  # solo avisa
 
 
 def test_secret_key_por_defecto_permitida_en_local(monkeypatch) -> None:

@@ -1,3 +1,4 @@
+import logging
 import os
 
 from pydantic import field_validator, model_validator
@@ -69,10 +70,14 @@ class Settings(BaseSettings):
     def _require_secret_in_production(self) -> "Settings":
         # Railway define RAILWAY_ENVIRONMENT_NAME en cada deploy.
         in_railway = any(k.startswith("RAILWAY_ENVIRONMENT") for k in os.environ)
-        if in_railway and (self.secret_key == DEV_SECRET_KEY or len(self.secret_key) < 32):
+        if in_railway and self.secret_key == DEV_SECRET_KEY:
             raise ValueError(
-                "SECRET_KEY no está configurada (o es muy corta) en Railway. "
+                "SECRET_KEY no está configurada en Railway. "
                 "Genera una con: python3 -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            )
+        if in_railway and len(self.secret_key) < 32:
+            logging.getLogger(__name__).warning(
+                "SECRET_KEY tiene menos de 32 caracteres; conviene una más larga."
             )
         return self
 

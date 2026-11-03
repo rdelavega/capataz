@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 
@@ -19,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    if not settings.whatsapp_app_secret:
+        logger.error("WHATSAPP_APP_SECRET no configurado: el webhook acepta mensajes sin firma de Meta")
     try:
         await run_migrations(engine)
     except Exception:
@@ -31,7 +34,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             await task
 
 
-app = FastAPI(title="Capataz API", version="0.2.0", lifespan=lifespan)
+# En producción no publicamos el mapa de la API (/docs, /openapi.json).
+_in_railway = any(k.startswith("RAILWAY_ENVIRONMENT") for k in os.environ)
+app = FastAPI(
+    title="Capataz API", version="0.2.0", lifespan=lifespan,
+    docs_url=None if _in_railway else "/docs",
+    redoc_url=None if _in_railway else "/redoc",
+    openapi_url=None if _in_railway else "/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,
