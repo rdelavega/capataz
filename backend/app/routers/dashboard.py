@@ -3,8 +3,7 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import cast, func, select
-from sqlalchemy.types import Date as SQLDate
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -15,6 +14,7 @@ from app.models.branch import Branch
 from app.models.event import Event
 from app.models.job import Job
 from app.models.worker import Worker
+from app.timeutil import local_date, local_today
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -33,7 +33,7 @@ def _semaforo(total: int, presentes: int, overdue_jobs: int) -> str:
 @router.get("/overview")
 async def get_overview(session: AsyncSession = Depends(get_db)) -> dict:
     company_id = uuid.UUID(settings.company_id)
-    today = date.today()
+    today = local_today()
 
     branches_result = await session.execute(
         select(Branch)
@@ -97,7 +97,7 @@ async def get_overview(session: AsyncSession = Depends(get_db)) -> dict:
             active = active_jobs_by_worker.get(worker.id, 0)
             overdue = overdue_jobs_by_worker.get(worker.id, 0)
             branch_overdue += overdue
-            if att and att.status == "presente":
+            if att and att.status in ("presente", "tarde"):
                 branch_presentes += 1
 
             workers_data.append({
@@ -134,7 +134,7 @@ async def get_events(
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     company_id = uuid.UUID(settings.company_id)
-    query_date = date.fromisoformat(work_date) if work_date else date.today()
+    query_date = date.fromisoformat(work_date) if work_date else local_today()
 
     rows = await session.execute(
         select(Event, Worker, Branch)
@@ -142,7 +142,7 @@ async def get_events(
         .outerjoin(Branch, Worker.branch_id == Branch.id)
         .where(
             Event.company_id == company_id,
-            cast(Event.received_at, SQLDate) == query_date,
+            local_date(Event.received_at) == query_date,
         )
         .order_by(Event.received_at.desc())
     )
@@ -171,7 +171,7 @@ async def get_events(
 @router.get("/workers")
 async def get_workers(session: AsyncSession = Depends(get_db)) -> dict:
     company_id = uuid.UUID(settings.company_id)
-    today = date.today()
+    today = local_today()
 
     # Último evento por worker
     subq = (
@@ -195,7 +195,7 @@ async def get_workers(session: AsyncSession = Depends(get_db)) -> dict:
         select(Event.worker_id, func.count(Event.id).label("cnt"))
         .where(
             Event.company_id == company_id,
-            cast(Event.received_at, SQLDate) == today,
+            local_date(Event.received_at) == today,
         )
         .group_by(Event.worker_id)
     )

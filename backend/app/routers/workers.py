@@ -3,12 +3,14 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import get_db
 from app.models.branch import Branch
 from app.models.worker import Worker
+from app.phone import normalize_phone
 from app.services import whatsapp
 
 router = APIRouter(prefix="/workers", tags=["workers"])
@@ -64,12 +66,15 @@ async def create_worker(
         company_id=company_id,
         branch_id=body.branch_id,
         name=body.name.strip(),
-        phone_number=body.phone_number.strip(),
+        phone_number=normalize_phone(body.phone_number),
         title=body.title.strip() if body.title else None,
         active=True,
     )
     session.add(worker)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="Ese número ya está registrado")
     await session.refresh(worker)
     return {"id": str(worker.id), "name": worker.name}
 

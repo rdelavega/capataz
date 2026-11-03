@@ -36,7 +36,9 @@ async def receive_message(
     payload = await request.json()
     company_id = uuid.UUID(settings.company_id)
 
-    # Extraer mensajes del payload (puede ser solo un status update)
+    # Extraer mensajes del payload (puede ser solo un status update).
+    # Meta puede mandar varios mensajes en un POST; cada evento guarda el
+    # payload completo y el parser localiza su mensaje por whatsapp_message_id.
     messages_to_process: list[tuple[str, dict]] = []
     try:
         for entry in payload.get("entry", []):

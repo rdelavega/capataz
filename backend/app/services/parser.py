@@ -4,7 +4,7 @@ de mensaje y dispara acciones secundarias (attendance, media, transcripción).
 """
 import logging
 import uuid
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
@@ -14,9 +14,16 @@ from app.models.attendance import AttendanceDaily
 from app.models.event import Event
 from app.models.job import Job
 from app.models.worker import Worker
+from app.phone import phone_variants
 from app.services import storage, transcription, whatsapp
+from app.timeutil import greeting, local_today
 
 logger = logging.getLogger(__name__)
+
+UNREGISTERED_REPLY = (
+    "Hola 👋 Este número es de Capataz, el sistema de registro de tu empresa. "
+    "Todavía no estás dado de alta: pídele a tu jefe que te registre."
+)
 
 CHECKIN_KEYWORDS = {
     "presente", "buenos días", "buen día", "buenos dias", "buen dia",
@@ -29,17 +36,35 @@ def _is_checkin(text: str) -> bool:
     return any(kw in text_lower for kw in CHECKIN_KEYWORDS)
 
 
-def _extract_message(raw: dict) -> dict | None:
-    """Navega el payload de WhatsApp Cloud API para extraer el primer mensaje."""
+def _extract_message(raw: dict, wa_msg_id: str) -> dict | None:
+    """Busca en el payload el mensaje de este evento (un POST puede traer varios)."""
+    for entry in raw.get("entry", []):
+        for change in entry.get("changes", []):
+            for msg in change.get("value", {}).get("messages", []):
+                if msg.get("id") == wa_msg_id:
+                    return msg
+    return None
+
+
+def _ack_reply(event_type: str, nombre: str, has_checkin: bool) -> str | None:
+    """Acuse de recibo para que el trabajador sepa que su mensaje sí llegó."""
+    reply = {
+        "photo":    f"📸 Foto recibida, {nombre}. Gracias.",
+        "audio":    f"🎙️ Audio recibido, {nombre}. Ya quedó anotado.",
+        "location": f"📍 Ubicación recibida, {nombre}. Gracias.",
+        "text":     f"👍 Recibido, {nombre}. Ya quedó anotado.",
+        "unknown":  f"👍 Recibido, {nombre}.",
+    }.get(event_type)
+    if reply and not has_checkin:
+        reply += " Si ya llegaste, manda *presente*."
+    return reply
+
+
+async def _safe_send(event_id: uuid.UUID, phone_number: str, body: str) -> None:
     try:
-        entry = raw["entry"][0]
-        change = entry["changes"][0]["value"]
-        messages = change.get("messages")
-        if not messages:
-            return None
-        return messages[0]
-    except (KeyError, IndexError):
-        return None
+        await whatsapp.send_text_message(phone_number, body)
+    except Exception as e:
+        logger.error("event %s: failed to send reply: %s", event_id, e)
 
 
 async def process_event(event_id: uuid.UUID) -> None:
@@ -52,7 +77,7 @@ async def _process(event_id: uuid.UUID, session) -> None:
     if event is None:
         return
 
-    msg = _extract_message(event.raw_payload)
+    msg = _extract_message(event.raw_payload, event.whatsapp_message_id)
     if msg is None:
         logger.info("event %s: no message in payload (status update?)", event_id)
         return
@@ -65,7 +90,7 @@ async def _process(event_id: uuid.UUID, session) -> None:
     company_id = uuid.UUID(settings.company_id)
     result = await session.execute(
         select(Worker).where(
-            Worker.phone_number == phone_number,
+            Worker.phone_number.in_(phone_variants(phone_number)),
             Worker.company_id == company_id,
             Worker.active.is_(True),
         )
@@ -73,7 +98,10 @@ async def _process(event_id: uuid.UUID, session) -> None:
     worker = result.scalar_one_or_none()
     if worker is None:
         logger.warning("event %s: worker not found for phone %s", event_id, phone_number)
+        await _safe_send(event_id, phone_number, UNREGISTERED_REPLY)
         return
+
+    nombre = worker.name.split()[0]
 
     # Clasificar tipo de mensaje
     msg_type = msg.get("type", "unknown")
@@ -83,6 +111,7 @@ async def _process(event_id: uuid.UUID, session) -> None:
     latitude: float | None = None
     longitude: float | None = None
     transcription_text: str | None = None
+    already_replied = False
 
     if msg_type == "text":
         text_content = msg.get("text", {}).get("body", "")
@@ -90,6 +119,7 @@ async def _process(event_id: uuid.UUID, session) -> None:
 
     elif msg_type == "image":
         event_type = "photo"
+        text_content = msg.get("image", {}).get("caption")
         media_id = msg.get("image", {}).get("id")
         if media_id:
             try:
@@ -102,18 +132,24 @@ async def _process(event_id: uuid.UUID, session) -> None:
     elif msg_type == "audio":
         event_type = "audio"
         media_id = msg.get("audio", {}).get("id")
+        media_bytes: bytes | None = None
         if media_id:
             try:
                 media_bytes = await whatsapp.download_media(media_id)
+            except Exception as e:
+                logger.error("event %s: failed to download audio: %s", event_id, e)
+        if media_bytes:
+            # Subida y transcripción independientes: si R2 falla, igual transcribimos
+            try:
                 key = f"media/{company_id}/{event_id}.ogg"
                 media_url = storage.upload_to_r2(media_bytes, key, "audio/ogg")
-                transcription_text = await transcription.transcribe(media_bytes)
-                # Si la transcripción suena a check-in, reclasificar
-                if transcription_text and _is_checkin(transcription_text):
-                    event_type = "checkin"
-                    text_content = transcription_text
             except Exception as e:
-                logger.error("event %s: failed to process audio: %s", event_id, e)
+                logger.error("event %s: failed to upload audio: %s", event_id, e)
+            transcription_text = await transcription.transcribe(media_bytes)
+            # Si la transcripción suena a check-in, reclasificar
+            if transcription_text and _is_checkin(transcription_text):
+                event_type = "checkin"
+                text_content = transcription_text
 
     elif msg_type == "interactive":
         interactive = msg.get("interactive", {})
@@ -134,16 +170,13 @@ async def _process(event_id: uuid.UUID, session) -> None:
                         job = job_result.scalar_one_or_none()
                         if job:
                             job.status = status
-                            nombre = worker.name.split()[0]
                             REPLY = {
                                 "completado":  f"✅ Tarea marcada como terminada. ¡Buen trabajo, {nombre}!",
                                 "en_progreso": f"🔄 Entendido, {nombre}. Sigue adelante.",
                                 "atrasado":    f"🚫 Anotado, {nombre}. El jefe ya sabe.",
                             }
-                            try:
-                                await whatsapp.send_text_message(phone_number, REPLY[status])
-                            except Exception as e:
-                                logger.error("event %s: failed to send button reply: %s", event_id, e)
+                            await _safe_send(event_id, phone_number, REPLY[status])
+                            already_replied = True
                         else:
                             logger.warning("event %s: job %s not found for worker %s", event_id, job_id_str, worker.id)
                     except ValueError:
@@ -165,16 +198,18 @@ async def _process(event_id: uuid.UUID, session) -> None:
     event.latitude = latitude
     event.longitude = longitude
 
+    today = local_today()
+    existing = await session.execute(
+        select(AttendanceDaily).where(
+            AttendanceDaily.worker_id == worker.id,
+            AttendanceDaily.work_date == today,
+        )
+    )
+    attendance = existing.scalar_one_or_none()
+
+    reply: str | None = None
     # Check-in → upsert en attendance_daily + respuesta al trabajador
     if event_type == "checkin":
-        today = date.today()
-        existing = await session.execute(
-            select(AttendanceDaily).where(
-                AttendanceDaily.worker_id == worker.id,
-                AttendanceDaily.work_date == today,
-            )
-        )
-        attendance = existing.scalar_one_or_none()
         if attendance is None:
             attendance = AttendanceDaily(
                 company_id=company_id,
@@ -185,16 +220,16 @@ async def _process(event_id: uuid.UUID, session) -> None:
                 event_id=event.id,
             )
             session.add(attendance)
-            reply = f"✅ ¡Presente! Buenos días, {worker.name.split()[0]}. Tu registro quedó guardado."
+            reply = f"✅ ¡Presente! {greeting()}, {nombre}. Tu registro quedó guardado."
         else:
-            attendance.status = "presente"
+            if attendance.status == "ausente":
+                attendance.status = "presente"
             attendance.checkin_at = attendance.checkin_at or datetime.now(tz=timezone.utc)
-            reply = f"👍 Ya tenías registro de hoy, {worker.name.split()[0]}. ¡Que te vaya bien!"
-
-        try:
-            await whatsapp.send_text_message(phone_number, reply)
-        except Exception as e:
-            logger.error("event %s: failed to send reply: %s", event_id, e)
+            reply = f"👍 Ya tenías registro de hoy, {nombre}. ¡Que te vaya bien!"
+    elif not already_replied:
+        reply = _ack_reply(event_type, nombre, has_checkin=attendance is not None)
 
     await session.commit()
+    if reply:
+        await _safe_send(event_id, phone_number, reply)
     logger.info("event %s: processed as %s for worker %s", event_id, event_type, worker.name)

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
 
     company_id: str
+    timezone: str = "America/Merida"
     allowed_origins: str = "http://localhost:5173,http://localhost:3000"
 
     secret_key: str = "dev-secret-change-in-prod"
