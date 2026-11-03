@@ -99,47 +99,82 @@ WhatsApp (trabajador)
 - Idempotencia siempre: cualquier handler de webhook debe poder recibir el
   mismo mensaje dos veces sin duplicar datos (usar `whatsapp_message_id`).
 
-## Estructura de carpetas propuesta
+- **Fechas siempre en hora local** (`America/Merida`, setting `TIMEZONE`):
+  el servidor y la DB corren en UTC. Usar `local_today()` y
+  `local_date(columna)` de `app/timeutil.py`, nunca `date.today()` ni
+  `cast(..., Date)`. En el frontend, nada de `toISOString()` para fechas.
+- **Teléfonos**: guardar con `normalize_phone()` (`+521XXXXXXXXXX` para
+  México) y buscar con `phone_variants()` (`app/phone.py`).
+- **El bot siempre contesta** cuando el trabajador escribe (acuse de recibo),
+  así sabe que su mensaje llegó. Esas respuestas caen en la ventana de
+  servicio gratis.
+- Tests en `backend/tests/` con pytest (`pip install -r requirements-dev.txt`,
+  `python -m pytest tests`). El parser se prueba con sesión y WhatsApp
+  simulados.
+- El build del frontend corre `tsc -b`: un import sin usar rompe el deploy de
+  Vercel. Correr `npm run build` antes de hacer push.
+
+## Estructura de carpetas
 
 ```
 capataz/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI app
-│   │   ├── config.py            # settings (pydantic-settings)
+│   │   ├── main.py               # FastAPI app
+│   │   ├── config.py             # settings (pydantic-settings)
 │   │   ├── db.py                 # engine, session
-│   │   ├── models/                # SQLAlchemy models
-│   │   ├── schemas/                # Pydantic schemas
+│   │   ├── dependencies.py       # get_current_user (JWT)
+│   │   ├── timeutil.py           # fechas en hora local
+│   │   ├── phone.py              # normalización de teléfonos MX
+│   │   ├── models/               # SQLAlchemy models
 │   │   ├── routers/
 │   │   │   ├── webhook.py        # POST/GET /webhook/whatsapp
-│   │   │   └── dashboard.py      # endpoints REST para el frontend
-│   │   ├── services/
-│   │   │   ├── whatsapp.py       # cliente Graph API (enviar mensajes, descargar media)
-│   │   │   ├── parser.py         # clasifica eventos entrantes
-│   │   │   ├── storage.py        # subida a R2
-│   │   │   └── transcription.py  # cliente Whisper
-│   │   └── alembic/
+│   │   │   ├── auth.py           # /auth/login, /auth/me
+│   │   │   ├── dashboard.py      # /dashboard/overview, /events, /workers
+│   │   │   ├── workers.py        # alta/baja de trabajadores y sucursales, recordar
+│   │   │   └── jobs.py           # CRUD de tareas, recordar con botones de WA
+│   │   └── services/
+│   │       ├── whatsapp.py       # cliente Graph API (enviar mensajes, descargar media)
+│   │       ├── parser.py         # clasifica eventos entrantes y contesta
+│   │       ├── storage.py        # subida a R2
+│   │       └── transcription.py  # cliente Whisper
 │   ├── tests/
+│   ├── seed.py                   # company inicial (crea tablas con create_all)
+│   ├── seed_user.py              # usuario del dueño
+│   ├── seed_demo.py              # día de demo creíble por giro (BORRA datos)
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
 │   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
+│   │   ├── components/           # Sidebar + MobileNav, WorkerFicha, BranchSection
+│   │   ├── pages/                # Dashboard, RegistrosDiarios, Equipo, Tareas, Login
 │   │   └── api/                  # cliente fetch hacia backend
-│   ├── package.json
-│   └── .env.example
+│   └── package.json
 ├── schema.sql
 └── CLAUDE.md
 ```
 
-## Próximo paso inmediato
+## Estado actual (2026-11-02)
 
-1. Crear `backend/` con FastAPI + SQLAlchemy models a partir de `schema.sql`.
-2. Implementar `GET /webhook/whatsapp` (verificación de Meta) y
-   `POST /webhook/whatsapp` (recepción de mensajes → insert en `events`).
-3. Implementar `parser.py` con lógica mínima: detectar tipo de mensaje y
-   asociar `worker_id` por `phone_number`.
-4. Seed script: insertar 1 company, 1-2 branches, 3-5 workers de prueba.
-5. Endpoint `GET /dashboard/overview` que regrese datos para el tablero.
-6. Frontend mínimo: tabla de workers + semáforo por branch.
+En producción: Railway (backend), Vercel (frontend), Supabase (DB).
+Funciona: webhook + parser, pase de lista, respuestas del bot, tareas con
+botones de WhatsApp, login del dueño, dashboard con semáforo, registros
+diarios con galería, alta de trabajadores y sucursales, navegación móvil.
+
+Demos: `python seed_demo.py --giro {construccion,taller,distribuidora,servicios}
+--empresa "..." --mi-numero "..." --fotos DIR`. El trabajador de
+`--mi-numero` es el que falta: manda "presente" en vivo durante la demo.
+
+## Próximos pasos
+
+1. **Botón "Recordar"**: falla si el trabajador no escribió en las últimas
+   24 h (error 131047 de Meta). Opción elegida: abrir `wa.me` desde el
+   celular del dueño en lugar de enviar por la API.
+2. Foto o ubicación cuentan como check-in (evidencia de presencia).
+3. Ligar fotos a tareas (evidencia de avance, feature #4).
+4. Historial: asistencia por mes por trabajador, exportable.
+5. Validar firma `X-Hub-Signature-256` en el webhook.
+6. Alembic (hoy las tablas se crean con `create_all`).
+
+Infra pendiente: configurar R2 en Railway (sin R2 no hay fotos en la
+galería) y evitar que Supabase pause el proyecto por inactividad.
