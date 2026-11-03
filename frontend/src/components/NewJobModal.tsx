@@ -27,6 +27,7 @@ export function NewJobModal({ defaultWorkerId, defaultCrewId, onClose, onCreated
   const [dueDate, setDueDate]   = useState('')
   const [saving, setSaving]     = useState(false)
   const [err, setErr]           = useState<string | null>(null)
+  const [loaded, setLoaded]     = useState(false)
 
   useEffect(() => {
     Promise.all([fetchWorkers(), fetchCrews(), fetchBranches()])
@@ -34,8 +35,9 @@ export function NewJobModal({ defaultWorkerId, defaultCrewId, onClose, onCreated
         setWorkers(w.workers)
         setCrews(c.crews)
         setBranches(b.branches)
-        // Sin cuadrillas todavía: se asigna a personas.
-        if (c.crews.length === 0) setTarget('person')
+        setLoaded(true)
+        // Sin cuadrillas todavía: arranca en "Una persona" (se puede regresar).
+        if (c.crews.length === 0 && !defaultCrewId) setTarget('person')
       })
       .catch(() => setErr('No se pudo cargar el equipo'))
   }, [])
@@ -99,11 +101,16 @@ export function NewJobModal({ defaultWorkerId, defaultCrewId, onClose, onCreated
             <legend className="label text-[#58423B]">Quién lo hace</legend>
             <div className="mt-1 flex gap-1.5" role="group">
               <button type="button" className={tab(target === 'crew')} aria-pressed={target === 'crew'}
-                onClick={() => setTarget('crew')} disabled={crews.length === 0}>Una cuadrilla</button>
+                onClick={() => setTarget('crew')}>Una cuadrilla</button>
               <button type="button" className={tab(target === 'person')} aria-pressed={target === 'person'}
                 onClick={() => setTarget('person')}>Una persona</button>
             </div>
-            {target === 'crew' ? (
+            {target === 'crew' && loaded && crews.length === 0 ? (
+              <p className="mono mt-2 border-2 border-dashed border-[#8C7169] bg-[#F2EDE4] px-3 py-2 text-xs text-[#58423B]">
+                Todavía no tienes cuadrillas. Ármalas en <b>Equipo → Cuadrillas</b> (nombre, obra y encargado),
+                o asígnale este trabajo a una persona.
+              </p>
+            ) : target === 'crew' ? (
               <>
                 <label htmlFor="job-crew" className="sr-only">Cuadrilla</label>
                 <select id="job-crew" value={crewId} onChange={e => setCrewId(e.target.value)} className={input}>
@@ -127,9 +134,6 @@ export function NewJobModal({ defaultWorkerId, defaultCrewId, onClose, onCreated
                   ))}
                 </select>
               </>
-            )}
-            {crews.length === 0 && (
-              <p className="mono mt-1 text-xs text-[#8C7169]">Arma cuadrillas en Equipo → Cuadrillas para mandarles trabajos.</p>
             )}
           </fieldset>
 
