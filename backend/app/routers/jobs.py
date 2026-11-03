@@ -34,6 +34,7 @@ class JobCreate(BaseModel):
     worker_id: uuid.UUID | None = None  # opcional: a una persona
     branch_id: uuid.UUID | None = None  # obra; si no viene, la de la cuadrilla o la persona
     due_date: date | None = None
+    notify: bool = True                 # avisarle por WhatsApp al encargado/persona
 
 
 class JobUpdate(BaseModel):
@@ -107,7 +108,30 @@ async def create_job(
     session.add(job)
     await session.commit()
     await session.refresh(job)
-    return {"id": str(job.id)}
+
+    result: dict = {"id": str(job.id), "notified": False, "notice": None}
+    if not body.notify:
+        return result
+    contact = await _job_worker(session, job)
+    if contact is None:
+        result["notice"] = "No se avisó a nadie: el trabajo no tiene persona ni encargado."
+        return result
+    crew = await session.get(Crew, job.crew_id) if job.crew_id else None
+    try:
+        await notify.job_assigned(session, company_id, job, contact, local_today(),
+                                  crew_name=crew.name if crew else None)
+        result["notified"] = True
+        result["notice"] = f"Le avisamos a {contact.name} por WhatsApp."
+    except notify.NoWindow:
+        result["notice"] = (
+            f"{contact.name} no ha escrito en 24 h y WhatsApp no deja mandarle mensaje. "
+            "Avísale desde tu celular."
+        )
+    except Exception:
+        logger.exception("job %s: no se pudo avisar a %s", job.id, contact.name)
+        result["notice"] = f"No se pudo avisar a {contact.name}. Avísale desde tu celular."
+    await session.commit()
+    return result
 
 
 @router.patch("/{job_id}", status_code=200)

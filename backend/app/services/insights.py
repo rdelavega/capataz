@@ -558,6 +558,7 @@ def job_card(s: Snapshot, j: Job) -> dict:
         "due_date": j.due_date.isoformat() if j.due_date else None,
         "overdue": job_is_overdue(j, s.today),
         "completed_at": j.completed_at.isoformat() if j.completed_at else None,
+        "acknowledged_at": j.acknowledged_at.isoformat() if j.acknowledged_at else None,
         "photo_count": len(photos),
         "last_photo_at": photos[-1].received_at.isoformat() if photos else None,
         "bot_asked_at": asked.isoformat() if asked else None,

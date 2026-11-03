@@ -237,3 +237,26 @@ def test_trabajo_de_cuadrilla_habla_con_el_encargado() -> None:
     assert job in s.jobs_of(luis)  # el trabajo de la cuadrilla aparece en la ficha de cada integrante
     item = next(i for i in insights.attention_items(s) if i["kind"] == "tarea_atrasada")
     assert item["worker_name"] == "Jorge Canché" and "Albañiles" in item["detail"]
+
+
+def test_aviso_de_trabajo_nuevo_con_ventana_lleva_detalles_y_botones(monkeypatch) -> None:
+    sent = _wa(monkeypatch)
+    monkeypatch.setattr(notify, "window_open", AsyncMock(return_value=True))
+    w = _worker("Jorge Canché")
+    job = _job("Fumigar casa García", None, "pendiente", TODAY + timedelta(days=1), description="Calle 60 #123")
+    asyncio.run(notify.job_assigned(_Session(), uuid.uuid4(), job, w, TODAY, crew_name="Cuadrilla Norte"))
+    body, buttons = sent["buttons"].await_args.args[1:3]
+    assert "Cuadrilla Norte" in body and "Calle 60 #123" in body and "mañana" in body
+    assert [b["reply"]["id"].split("::")[0] for b in buttons] == ["visto", "completado", "atrasado"]
+
+
+def test_aviso_de_trabajo_nuevo_sin_ventana_usa_plantilla(monkeypatch) -> None:
+    sent = _wa(monkeypatch)
+    monkeypatch.setattr(notify, "window_open", AsyncMock(return_value=False))
+    monkeypatch.setattr(notify.settings, "wa_template_job_assigned", "capataz_trabajo_asignado")
+    w = _worker("Jorge Canché")
+    job = _job("Fumigar casa García", None, "pendiente", None)
+    asyncio.run(notify.job_assigned(_Session(), uuid.uuid4(), job, w, TODAY))
+    _, name, params = sent["template"].await_args.args[:3]
+    assert name == "capataz_trabajo_asignado"
+    assert params == ["Jorge", "Fumigar casa García", "sin fecha", "sin detalles"]

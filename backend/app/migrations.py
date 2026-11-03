@@ -16,6 +16,7 @@ STATEMENTS: list[str] = [
     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ",
     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ",
     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS review_note TEXT",
+    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number TEXT",
     "CREATE INDEX IF NOT EXISTS idx_events_job ON events (job_id)",
     """

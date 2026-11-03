@@ -119,6 +119,41 @@ async def job_progress(session: AsyncSession, company_id: uuid.UUID, job: Job, w
     await _log(session, company_id, "job_progress", worker_id=worker.id, job_id=job.id)
 
 
+async def job_assigned(session: AsyncSession, company_id: uuid.UUID, job: Job, worker: Worker,
+                       today, crew_name: str | None = None) -> None:
+    """Aviso de trabajo nuevo al encargado (o a la persona asignada)."""
+    nombre = _first_name(worker.name)
+    jid = str(job.id)
+    payloads = [f"visto::{jid}", f"completado::{jid}", f"atrasado::{jid}"]
+    para = _vence(job, today) if job.due_date else "sin fecha"
+    detalles = (job.description or "").strip()
+    in_window = await window_open(session, worker.id)
+    if not in_window and not settings.wa_template_job_assigned:
+        raise NoWindow(worker.name)
+    try:
+        if in_window:
+            quien = f" para *{crew_name}*" if crew_name else ""
+            body = f"📋 Nuevo trabajo{quien}: *{job.title}*\nPara: {para}"
+            if detalles:
+                body += f"\n\n{detalles[:600]}"
+            body += "\n\nCuando terminen, aprieta *Ya terminé* y manda foto."
+            titles = ["👍 Enterado", "✅ Ya terminé", "🚫 Tengo un problema"]
+            await whatsapp.send_interactive_buttons(
+                worker.phone_number, body,
+                [{"type": "reply", "reply": {"id": p, "title": t}} for p, t in zip(payloads, titles)],
+            )
+        else:
+            await whatsapp.send_template(
+                worker.phone_number, settings.wa_template_job_assigned,
+                [nombre, job.title, para, detalles[:200] or "sin detalles"],
+                quick_reply_payloads=payloads,
+            )
+    except Exception as e:
+        await _log(session, company_id, "job_assigned", worker_id=worker.id, job_id=job.id, error=e)
+        raise
+    await _log(session, company_id, "job_assigned", worker_id=worker.id, job_id=job.id)
+
+
 def summary_params(s: Snapshot) -> list[str]:
     """Parámetros de la plantilla de resumen diario (ver docs/plantillas_whatsapp.md)."""
     present = [w for w in s.workers

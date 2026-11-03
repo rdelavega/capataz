@@ -256,3 +256,12 @@ def test_elegir_trabajo_liga_la_foto(sent) -> None:
     asyncio.run(parser._process(event.id, session))
     assert photo.job_id == job.id
     assert job.title in sent.await_args.args[1]
+
+
+def test_enterado_registra_que_el_encargado_lo_vio(sent) -> None:
+    job = _job("pendiente", worker_id=None, crew_id=CREW_ID)
+    event = _event(_payload(_button("wamid.1", f"visto::{job.id}")), "wamid.1")
+    _run(event, worker=MEMBER, extra=[job])
+    assert job.acknowledged_at is not None and job.status == "pendiente"
+    assert event.job_id == job.id
+    assert "Ya terminé" in sent.await_args.args[1]

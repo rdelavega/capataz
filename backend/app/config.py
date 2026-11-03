@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     wa_template_lang: str = "es_MX"
     wa_template_checkin_reminder: str = ""
     wa_template_job_progress: str = ""
+    wa_template_job_assigned: str = ""
     wa_template_daily_summary: str = ""
     checkin_reminder_time: str = "08:30"
     job_progress_time: str = "15:00"

@@ -39,6 +39,7 @@ export function Tareas() {
   const [showAllDone, setShowAllDone] = useState(false)
   const [photo, setPhoto]     = useState<LightboxEntry | null>(null)
   const [now, setNow]         = useState(() => Date.now())
+  const [notice, setNotice]   = useState<string | null>(null)
   const { version, bump } = useWorkerDrawer()
 
   const load = useCallback(async () => {
@@ -116,6 +117,12 @@ export function Tareas() {
 
       <main className="space-y-5 px-4 py-5 md:px-8 md:py-6">
         {err && <p className="mono border-2 border-[#A32D2D] bg-[#FFF8F3] px-4 py-3 text-[#A32D2D]">No se pudo cargar — {err}</p>}
+        {notice && (
+          <div className="flex items-center justify-between gap-3 border-2 border-[#2A2622] border-l-8 border-l-[#639922] bg-[#FFF8F3] px-4 py-2.5" role="status">
+            <span className="text-sm">{notice}</span>
+            <button className="btn btn-sm" onClick={() => setNotice(null)}>Cerrar</button>
+          </div>
+        )}
 
         {/* Resumen */}
         <div className="grid gap-4 sm:grid-cols-3">
@@ -191,7 +198,12 @@ export function Tareas() {
         )}
       </main>
 
-      {showModal && <NewJobModal onClose={() => setShowModal(false)} onCreated={afterChange} />}
+      {showModal && (
+        <NewJobModal
+          onClose={() => setShowModal(false)}
+          onCreated={msg => { afterChange(); if (msg) setNotice(msg) }}
+        />
+      )}
       {photo && <PhotoLightbox entry={photo} onClose={() => setPhoto(null)} />}
     </div>
   )
@@ -294,6 +306,11 @@ function JobCard({ job: j, column, onChanged, onPhoto }: {
       {j.review_note && column !== 'terminadas' && (
         <p className="border-l-[3px] border-[#D85A30] pl-2 text-xs text-[#58423B]">
           <b>Regresada:</b> {j.review_note}
+        </p>
+      )}
+      {j.acknowledged_at && column !== 'terminadas' && (
+        <p className="mono flex items-center gap-1 text-[11px] text-[#4F7D1A]">
+          <Check size={12} aria-hidden="true" /> {firstName(j.contact_name) || 'Lo'} lo vio {fmtCuando(j.acknowledged_at)}
         </p>
       )}
       {j.bot_asked_at && column !== 'terminadas' && (

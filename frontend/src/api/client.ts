@@ -205,6 +205,8 @@ export interface JobCardData {
   due_date: string | null
   overdue: boolean
   completed_at: string | null
+  /** Cuándo el encargado apretó "Enterado" en el aviso de WhatsApp. */
+  acknowledged_at: string | null
   photo_count: number
   last_photo_at: string | null
   bot_asked_at: string | null
@@ -348,6 +350,8 @@ export interface JobCreate {
   worker_id?: string
   branch_id?: string
   due_date?: string
+  /** Avisarle por WhatsApp al encargado o a la persona (default: sí). */
+  notify?: boolean
 }
 
 export interface JobUpdate {
@@ -361,7 +365,7 @@ export interface JobUpdate {
 export const fetchJobs = () => apiFetch<JobsResponse>('/jobs')
 
 export const createJob = (data: JobCreate) =>
-  apiFetch<{ id: string }>('/jobs', { method: 'POST', body: JSON.stringify(data) })
+  apiFetch<{ id: string; notified: boolean; notice: string | null }>('/jobs', { method: 'POST', body: JSON.stringify(data) })
 
 export const updateJob = (id: string, data: JobUpdate) =>
   apiFetch<{ ok: boolean }>(`/jobs/${id}`, { method: 'PATCH', body: JSON.stringify(data) })

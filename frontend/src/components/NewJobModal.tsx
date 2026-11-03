@@ -13,7 +13,8 @@ export function NewJobModal({ defaultWorkerId, defaultCrewId, onClose, onCreated
   defaultWorkerId?: string
   defaultCrewId?: string
   onClose: () => void
-  onCreated: () => void
+  /** notice: resultado del aviso por WhatsApp, para mostrarlo en la pantalla de origen. */
+  onCreated: (notice?: string) => void
 }) {
   const [workers, setWorkers]   = useState<WorkerDetail[]>([])
   const [crews, setCrews]       = useState<CrewData[]>([])
@@ -28,6 +29,8 @@ export function NewJobModal({ defaultWorkerId, defaultCrewId, onClose, onCreated
   const [saving, setSaving]     = useState(false)
   const [err, setErr]           = useState<string | null>(null)
   const [loaded, setLoaded]     = useState(false)
+  const [notifyLead, setNotify] = useState(true)
+  const [warning, setWarning]   = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([fetchWorkers(), fetchCrews(), fetchBranches()])
@@ -58,15 +61,22 @@ export function NewJobModal({ defaultWorkerId, defaultCrewId, onClose, onCreated
     setSaving(true)
     setErr(null)
     try {
-      await createJob({
+      const res = await createJob({
         title: title.trim(),
         description: desc.trim() || undefined,
         crew_id: target === 'crew' ? crewId || undefined : undefined,
         worker_id: target === 'person' ? workerId || undefined : undefined,
         branch_id: branchId || undefined,
         due_date: dueDate || undefined,
+        notify: notifyLead,
       })
-      onCreated()
+      if (notifyLead && !res.notified && res.notice) {
+        // El trabajo sí se creó; solo falló el aviso. Que el dueño lo sepa antes de cerrar.
+        onCreated()
+        setWarning(res.notice)
+        return
+      }
+      onCreated(res.notice ?? undefined)
       onClose()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al crear')
@@ -157,12 +167,34 @@ export function NewJobModal({ defaultWorkerId, defaultCrewId, onClose, onCreated
               placeholder="Dirección, materiales, lo que deba saber la cuadrilla…" className={`${input} resize-none`} />
           </div>
 
+          {(() => {
+            const who = target === 'crew' ? lead?.name : workers.find(w => w.id === workerId)?.name
+            return (
+              <label className="flex cursor-pointer items-start gap-2.5 border-2 border-[#2A2622] bg-white px-3 py-2.5">
+                <input type="checkbox" checked={notifyLead} onChange={e => setNotify(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-[#D85A30]" />
+                <span className="text-sm leading-snug">
+                  <b>Avisarle por WhatsApp</b>{who ? ` a ${who}` : ''}
+                  <span className="mono block text-[11px] text-[#8C7169]">
+                    Le llega el trabajo con botones: Enterado / Ya terminé / Tengo un problema.
+                  </span>
+                </span>
+              </label>
+            )
+          })()}
+
           <p className="mono text-xs text-[#8C7169]">
             Cuando digan que terminaron, el bot pide foto y el trabajo queda esperando tu visto bueno.
           </p>
 
           {err && <p className="label text-[#A32D2D]">{err}</p>}
 
+          {warning ? (
+            <div className="space-y-2 border-2 border-[#BA7517] bg-[#FDF2E4] p-3">
+              <p className="text-sm"><b>El trabajo se creó.</b> {warning}</p>
+              <button type="button" className="btn btn-primary" onClick={onClose}>Entendido</button>
+            </div>
+          ) : (
           <div className="flex gap-2 pt-1">
             <button
               type="submit"
@@ -173,6 +205,7 @@ export function NewJobModal({ defaultWorkerId, defaultCrewId, onClose, onCreated
             </button>
             <button type="button" onClick={onClose} className="btn py-2">Cancelar</button>
           </div>
+          )}
         </form>
       </div>
     </div>

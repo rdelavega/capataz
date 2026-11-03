@@ -69,6 +69,7 @@ CREATE TABLE jobs (
     completed_at TIMESTAMPTZ,          -- cuándo dijo "terminé"
     approved_at  TIMESTAMPTZ,          -- cuándo el dueño aprobó
     review_note  TEXT,                 -- por qué se regresó
+    acknowledged_at TIMESTAMPTZ,       -- cuándo el encargado apretó "Enterado"
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );

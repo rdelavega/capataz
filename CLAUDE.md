@@ -128,6 +128,10 @@ WhatsApp (trabajador)
   tiene varios trabajos abiertos, el bot pregunta de cuál es la foto
   (payload `foto::<event>::<job>`). Asignar a una persona sigue existiendo como
   excepción.
+- **Al crear un trabajo se le avisa al encargado** (o a la persona) por
+  WhatsApp, con botones Enterado / Ya terminé / Tengo un problema
+  (`notify.job_assigned`). Sin ventana de 24 h usa la plantilla
+  `WA_TEMPLATE_JOB_ASSIGNED`; "Enterado" llena `jobs.acknowledged_at`.
 - **Hora de entrada**: `WORKDAY_START` (08:00) + `LATE_TOLERANCE_MINUTES`
   (10). Check-in después = `tarde`. `REST_WEEKDAYS` (domingo) no cuenta faltas.
 - **Escribirle a un trabajador desde el dashboard = link `wa.me`** desde el

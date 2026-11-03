@@ -78,6 +78,29 @@ preguntas abiertas.
 
 ---
 
+### 2b. Trabajo asignado
+
+- **Nombre:** `capataz_trabajo_asignado`
+- **Variable en Railway:** `WA_TEMPLATE_JOB_ASSIGNED`
+- **Cuándo:** al crear un trabajo en el dashboard con "Avisarle por WhatsApp"
+  marcado. Le llega al **encargado** de la cuadrilla (o a la persona asignada).
+- **Casi nunca se usa:** si el encargado escribió en las últimas 24 h, el aviso
+  va como mensaje normal (gratis dentro de los 1,000 de servicio). Esta es el
+  respaldo para cuando no ha escrito.
+
+**Cuerpo:**
+```
+Hola {{1}}, se te asignó el trabajo "{{2}}" con fecha de entrega {{3}}. Detalles: {{4}}. Confirma de recibido con el botón. Al terminar, indícalo y envía una foto como evidencia.
+```
+Ejemplos: `Jorge` · `Fumigar casa García` · `mañana` · `Calle 60 #123, Centro`
+
+**Botones (respuesta rápida):**
+1. `Enterado`
+2. `Terminado`
+3. `Tengo un problema`
+
+---
+
 ### 3. Resumen diario al dueño
 
 - **Nombre:** `capataz_resumen_diario`

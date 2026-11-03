@@ -36,7 +36,7 @@ CHECKIN_KEYWORDS = {
 _unregistered_replied: dict[str, date] = {}
 
 # Botones que mandan los mensajes del bot: "<estado>::<job_id>" o una acción simple.
-JOB_BUTTON_STATUSES = {"completado", "en_progreso", "atrasado"}
+JOB_BUTTON_STATUSES = {"visto", "completado", "en_progreso", "atrasado"}
 BUTTON_CHECKIN = "checkin"
 BUTTON_ABSENT = "ausente"
 # "foto::<event_id>::<job_id>": el trabajador eligió a qué trabajo pertenece una foto.
@@ -116,6 +116,13 @@ async def _handle_job_button(session, worker: Worker, nombre: str, payload: str)
 
     if job.status == "completado":
         return f"👍 *{job.title}* ya estaba aprobada, {nombre}. ¡Gracias!"
+
+    if status == "visto":
+        job.acknowledged_at = job.acknowledged_at or datetime.now(tz=timezone.utc)
+        return (
+            f"👍 Anotado, {nombre}. Cuando terminen *{job.title}*, aprieta *Ya terminé* "
+            "en este mensaje y manda foto."
+        )
 
     if status == "completado":
         # "Terminé" no cierra la tarea: queda por revisar hasta que el dueño ve la foto.
