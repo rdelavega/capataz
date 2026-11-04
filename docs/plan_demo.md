@@ -70,7 +70,7 @@ celular con WhatsApp.
 
 7. **Scouting (5 min)** → preguntas de la sección 4. Es lo más importante.
 
-**Cierre:** "¿Te gustaría probarlo con tu gente 30 días?" Si dice que sí, agenda
+**Cierre:** "¿Te gustaría probarlo con tu gente 15 días?" Si dice que sí, agenda
 el alta: lista de trabajadores con teléfono, obras/sucursales, hora de entrada.
 
 ### Si algo falla en vivo
@@ -95,7 +95,7 @@ Por número de trabajadores activos, mensual, más IVA:
   (Railway, Supabase, dominio): ~$500–900 MXN/mes en total. Margen > 70%.
 - **Ancla de valor**: un supervisor cuesta $12,000–20,000 MXN/mes; una hora
   diaria del dueño persiguiendo gente son ~22 h/mes.
-- **Pilotos (primeros 3–5)**: 30 días gratis o primer mes a mitad de precio, a
+- **Pilotos (primeros 3–5)**: 15 días de prueba sin costo (así lo dice la landing), a
   cambio de retroalimentación y de ser referencia. No regalar más de un mes.
 - No dar el precio antes de que vea la demo. Si pregunta al inicio: "depende
   de cuánta gente tengas; te lo digo al final con tu caso".
