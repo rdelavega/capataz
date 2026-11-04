@@ -1,6 +1,9 @@
 {
+  "redirects": [
+    { "source": "/privacy", "destination": "https://landing-ten-blond-15.vercel.app/privacidad", "permanent": false },
+    { "source": "/privacy.html", "destination": "https://landing-ten-blond-15.vercel.app/privacidad", "permanent": false }
+  ],
   "rewrites": [
-    { "source": "/privacy", "destination": "/privacy.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
