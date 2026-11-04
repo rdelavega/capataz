@@ -29,7 +29,7 @@ from app.db import AsyncSessionLocal, engine
 from app.models import AttendanceDaily, Branch, Company, Crew, Event, Job, Notification, Worker
 from app.phone import normalize_phone
 from app.services import storage
-from app.timeutil import TZ, is_rest_day, local_now, local_today
+from app.timeutil import TZ, is_late, is_rest_day, late_cutoff, local_now, local_today
 
 # Cada giro: 2 sucursales, 8 trabajadores (nombre, puesto, índice de sucursal),
 # tareas (título, índice de trabajador, estado, días para entrega),
@@ -188,8 +188,44 @@ HISTORY_JOBS: dict[str, list[str]] = {
 }
 
 
-def _at(t: time, shift: timedelta) -> datetime:
-    return datetime.combine(local_today(), t, tzinfo=TZ) - shift
+class DemoClock:
+    """
+    Horas del día de demo según la hora real en que se prepara, para que nada
+    quede en el futuro y la historia siga siendo creíble:
+
+    - Llegadas: conservan su hora. Quien todavía no "debería" haber llegado no
+      aparece; el que llega tarde aparece en cuanto ya es tarde (después de la
+      hora de entrada + tolerancia).
+    - Actividad (fotos, audios, "terminé"): de 8:30 a 11:30, comprimida entre
+      las 8:30 y la hora actual si la demo es antes de las 11:30.
+    """
+
+    ACTIVITY_START = time(8, 30)
+    ACTIVITY_END = time(11, 30)
+
+    def __init__(self, now: datetime) -> None:
+        self.today = now.date()
+        self.cutoff = now - timedelta(minutes=5)
+
+    def _dt(self, t: time) -> datetime:
+        return datetime.combine(self.today, t, tzinfo=TZ)
+
+    def checkin(self, t: time, arrives_late: bool) -> datetime | None:
+        at = self._dt(t)
+        if at <= self.cutoff:
+            return at
+        if arrives_late and self.cutoff > late_cutoff(self.today):
+            return self.cutoff  # acaba de llegar, ya tarde
+        return None  # todavía no llega
+
+    def activity(self, t: time) -> datetime:
+        start, end = self._dt(self.ACTIVITY_START), self._dt(self.ACTIVITY_END)
+        if self.cutoff >= end:
+            return self._dt(t)
+        w1 = self.cutoff
+        w0 = min(start, w1 - timedelta(minutes=90))
+        frac = min(1.0, max(0.0, (self._dt(t) - start) / (end - start)))
+        return w0 + (w1 - w0) * frac
 
 
 async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path | None) -> None:
@@ -197,9 +233,7 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
     company_id = uuid.UUID(settings.company_id)
     today = local_today()
 
-    # Si la demo es temprano, recorre la historia para que nada quede en el futuro
-    latest = datetime.combine(today, time(11, 30), tzinfo=TZ)
-    shift = max(timedelta(0), latest - (local_now() - timedelta(minutes=10)))
+    clock = DemoClock(local_now())
 
     photo_files = sorted(
         p for p in (fotos.iterdir() if fotos else [])
@@ -267,7 +301,7 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
                 worker_id=None if crew else workers[w].id, title=title, status=status,
                 due_date=today + timedelta(days=days),
                 created_at=local_now() - timedelta(days=5),
-                completed_at=_at(time(10, 15), shift) if status == "por_revisar" else None,
+                completed_at=clock.activity(time(10, 15)) if status == "por_revisar" else None,
             ))
         session.add_all(jobs)
         await session.flush()
@@ -281,16 +315,20 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
             session.add(e)
             return e
 
+        late_arrived = False
         for i, checkin in enumerate(CHECKINS):
             if checkin is None:
                 continue
             t, text = checkin
-            at = _at(t, shift)
+            at = clock.checkin(t, arrives_late=(i == LATE_INDEX))
+            if at is None:
+                continue
+            late_arrived |= is_late(at)
             e = event(workers[i], at, "checkin", text_content=text)
             await session.flush()
             session.add(AttendanceDaily(
                 company_id=company_id, worker_id=workers[i].id, work_date=today,
-                status="tarde" if i == LATE_INDEX else "presente",
+                status="tarde" if is_late(at) else "presente",
                 checkin_at=at, event_id=e.id,
             ))
 
@@ -300,27 +338,28 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
                 f = photo_files[n]
                 key = f"media/{company_id}/demo-{giro}-{n}{f.suffix.lower()}"
                 media_url = storage.upload_to_r2(f.read_bytes(), key)
-            event(workers[w], _at(time(9 + n, 20), shift), "photo",
+            event(workers[w], clock.activity(time(9 + n, 20)), "photo",
                   job_id=jobs[j].id, text_content=caption, media_url=media_url)
 
-        await _seed_history(session, company_id, giro, workers, crew_of, today, shift,
+        await _seed_history(session, company_id, giro, workers, crew_of, today,
                             [e.media_url for e in session.new if isinstance(e, Event) and e.media_url])
 
         # El bot ya le preguntó al que falta (se ve en "Necesita tu atención")
-        if local_now() > _at(time(8, 30), shift):
+        reminder_at = datetime.combine(today, time(8, 30), tzinfo=TZ)
+        if local_now() > reminder_at:
             session.add(Notification(
                 company_id=company_id, kind="checkin_reminder",
-                worker_id=workers[MISSING_INDEX].id, sent_at=_at(time(8, 30), shift),
+                worker_id=workers[MISSING_INDEX].id, sent_at=reminder_at,
             ))
 
         w, transcript = data["audio"]
-        event(workers[w], _at(time(10, 5), shift), "audio",
+        event(workers[w], clock.activity(time(10, 5)), "audio",
               transcription=transcript, text_content=None)
 
         w, text = data["text"]
-        event(workers[w], _at(time(10, 48), shift), "text", text_content=text)
+        event(workers[w], clock.activity(time(10, 48)), "text", text_content=text)
 
-        event(workers[0], _at(time(11, 30), shift), "location",
+        event(workers[0], clock.activity(time(11, 30)), "location",
               latitude=21.0190, longitude=-89.6237)
 
     await engine.dispose()
@@ -328,13 +367,14 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
     missing = workers[MISSING_INDEX]
     print(f"\n✓ Demo '{giro}' lista para {empresa}")
     print(f"  {len(workers)} trabajadores · {len(crew_of and set(crew_of.values()))} cuadrillas · {len(jobs)} trabajos · "
-          f"{workers[LATE_INDEX].name} llegó tarde · {missing.name} no ha llegado")
+          + (f"{workers[LATE_INDEX].name} llegó tarde · " if late_arrived else "nadie ha llegado tarde aún · ")
+          + f"{missing.name} no ha llegado")
     if mi_numero:
         print(f"  {missing.name} eres tú ({missing.phone_number}): manda \"presente\" en la demo.")
 
 
 async def _seed_history(session, company_id: uuid.UUID, giro: str, workers: list[Worker],
-                        crew_of: dict[int, Crew], today, shift: timedelta, photo_urls: list[str]) -> None:
+                        crew_of: dict[int, Crew], today, photo_urls: list[str]) -> None:
     """30 días hacia atrás: asistencia con patrones creíbles y tareas cerradas con foto."""
     for back in range(1, HISTORY_DAYS):
         d = today - timedelta(days=back)
