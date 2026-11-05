@@ -1,6 +1,6 @@
 import { MapPin, MapPinCheck, MapPinOff } from 'lucide-react'
 import type { AttendanceStatus, CheckinLocation } from '../api/client'
-import { fmtHora } from '../lib/format'
+import { fmtDistance, fmtHora } from '../lib/format'
 
 /** Estado de hoy en un solo chip, con hora. Es el único lugar donde se muestra. */
 export function TodayStatus({ status, checkinAt }: { status: AttendanceStatus | null; checkinAt: string | null }) {
@@ -11,21 +11,31 @@ export function TodayStatus({ status, checkinAt }: { status: AttendanceStatus | 
 }
 
 const LOCATION_CHIP: Record<CheckinLocation['status'], { cls: string; title: string }> = {
-  en_sitio:       { cls: 'chip chip-green', title: 'Checó desde la obra' },
-  lejos:          { cls: 'chip chip-amber', title: 'Checó lejos de la obra. Puede que lo hayan mandado a otro lado. Solo se guarda la distancia, no dónde estaba.' },
-  sin_referencia: { cls: 'chip chip-gray',  title: 'Mandó su ubicación, pero la obra no tiene ubicación para comparar. Fíjala en Equipo.' },
-  sin_ubicacion:  { cls: 'chip chip-gray',  title: 'Checó sin mandar su ubicación' },
+  en_sitio:       { cls: 'text-[#4F7D1A] font-semibold', title: 'Checó desde la obra' },
+  // Lo único que el dueño tiene que notar: con fondo.
+  lejos:          { cls: 'border-2 border-[#2A2622] bg-[#BA7517] px-1.5 font-semibold text-white', title: 'Checó lejos de la obra. Puede que lo hayan mandado a otro lado. Solo se guarda la distancia, no dónde estaba.' },
+  sin_referencia: { cls: 'text-[#8C7169]', title: 'Mandó su ubicación, pero la obra no tiene ubicación para comparar. Fíjala en Equipo.' },
+  sin_ubicacion:  { cls: 'text-[#8C7169]', title: 'Checó sin mandar su ubicación' },
 }
 
-/** Si el check-in de hoy se hizo desde la obra. Nunca muestra dónde estaba, solo la distancia. */
-export function LocationChip({ location }: { location: CheckinLocation | null }) {
+/**
+ * Si el check-in de hoy se hizo desde la obra. Nunca muestra dónde estaba, solo la distancia.
+ * ownBranch: la obra del trabajador. Si se pasa (p. ej. en una lista agrupada por obra),
+ * no se repite su nombre: "En obra" / "A 2.4 km".
+ */
+export function LocationChip({ location, ownBranch }: { location: CheckinLocation | null; ownBranch?: string | null }) {
   if (!location) return null
   const { cls, title } = LOCATION_CHIP[location.status]
   const Icon = location.status === 'en_sitio' ? MapPinCheck : location.status === 'lejos' ? MapPin : MapPinOff
+  let label = location.label
+  if (ownBranch !== undefined && location.branch_name === ownBranch) {
+    if (location.status === 'en_sitio') label = 'En obra'
+    if (location.status === 'lejos' && location.distance_m !== null) label = `A ${fmtDistance(location.distance_m)}`
+  }
   return (
-    <span className={`${cls} inline-flex items-center gap-1`} title={title}>
-      <Icon size={11} aria-hidden="true" />
-      {location.label}
+    <span className={`inline-flex items-center gap-1 text-xs leading-5 ${cls}`} title={title}>
+      <Icon size={12} aria-hidden="true" className="shrink-0" />
+      {label}
     </span>
   )
 }

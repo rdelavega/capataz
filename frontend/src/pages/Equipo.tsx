@@ -1,9 +1,9 @@
-import { ChevronRight, ExternalLink, MapPin, MapPinOff, RefreshCw, Search, X } from 'lucide-react'
+import { ChevronRight, ExternalLink, MapPin, MapPinOff, RefreshCw, Search, Star, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { BranchOption, CrewData, WorkerDetail, WorkersResponse } from '../api/client'
 import { createBranch, createWorker, fetchBranches, fetchCrews, fetchWorkers, updateBranch } from '../api/client'
 import { CrewsBoard } from '../components/Crews'
-import { AttendanceStrip } from '../components/Attendance'
+import { AttendanceStrip, StripLegend } from '../components/Attendance'
 import { LocationChip, TodayStatus } from '../components/TodayStatus'
 import { useWorkerDrawer } from '../components/WorkerDrawer'
 import { EVENT_LABEL, fmtHace, initials } from '../lib/format'
@@ -65,14 +65,14 @@ function AddWorkerModal({ branches, crews, onClose, onSaved }: AddWorkerModalPro
             <label className="label mb-1 block text-[#58423B]">Nombre completo *</label>
             <input required value={name} onChange={e => setName(e.target.value)}
               placeholder="Juan López"
-              className="mono w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
+              className="text-sm w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
           </div>
           <div>
             <label className="label mb-1 block text-[#58423B]">Teléfono WhatsApp *</label>
             <input required value={phone} onChange={e => setPhone(e.target.value)}
               placeholder="+5215512345001"
               className="mono w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
-            <p className="mono mt-1 text-xs text-[#8C7169]">+521 para móviles México</p>
+            <p className="mt-1 text-xs text-[#8C7169]">+521 para móviles México</p>
           </div>
           <div>
             <label className="label mb-1 block text-[#58423B]">Sucursal *</label>
@@ -85,7 +85,7 @@ function AddWorkerModal({ branches, crews, onClose, onSaved }: AddWorkerModalPro
             <label className="label mb-1 block text-[#58423B]">Puesto / Título</label>
             <input value={title} onChange={e => setTitle(e.target.value)}
               placeholder="Albañil, Electricista, Supervisora..."
-              className="mono w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
+              className="text-sm w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
           </div>
 
           {crews.length > 0 && (
@@ -99,7 +99,7 @@ function AddWorkerModal({ branches, crews, onClose, onSaved }: AddWorkerModalPro
             </div>
           )}
 
-          {error && <p className="mono text-sm text-[#A32D2D]">Error — {error}</p>}
+          {error && <p className="text-sm text-[#A32D2D]">Error — {error}</p>}
 
           <div className="flex justify-end gap-3 border-t-2 border-[#E0C0B6] pt-4">
             <button type="button" onClick={onClose}
@@ -163,16 +163,16 @@ function AddBranchModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
             <input required value={name} onChange={e => setName(e.target.value)}
               placeholder="Obra Norte, Sucursal Centro..."
               autoFocus
-              className="mono w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
+              className="text-sm w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
           </div>
           <div>
             <label className="label mb-1 block text-[#58423B]" htmlFor="branch-location">Ubicación (para verificar llegadas)</label>
             <input id="branch-location" value={location} onChange={e => setLocation(e.target.value)}
               placeholder="https://maps.app.goo.gl/…"
-              className="mono w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
-            <p className="mono mt-1 text-[11px] text-[#8C7169]">{LOCATION_HELP} Puedes dejarlo para después.</p>
+              className="text-sm w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
+            <p className="mt-1 text-xs text-[#8C7169]">{LOCATION_HELP} Puedes dejarlo para después.</p>
           </div>
-          {error && <p className="mono text-sm text-[#A32D2D]">Error — {error}</p>}
+          {error && <p className="text-sm text-[#A32D2D]">Error — {error}</p>}
           <div className="flex justify-end gap-3 border-t-2 border-[#E0C0B6] pt-4">
             <button type="button" onClick={onClose}
               className="label border-2 border-[#2A2622] px-4 py-2 text-[#58423B] hover:bg-[#ECE1D3] transition-colors">
@@ -232,12 +232,12 @@ function BranchLocationModal({ branch, onClose, onSaved }: { branch: BranchOptio
           ><X size={14} /></button>
         </div>
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          <p className="mono text-xs text-[#58423B]">
+          <p className="text-xs text-[#58423B]">
             Cuando alguien manda "presente", el bot le pide su ubicación y la compara con esta.
             Si checa a más de {radius || branch.geofence_m} m, te sale aviso. Solo se guarda la distancia, nunca dónde estaba.
           </p>
           {branch.has_location && branch.maps_url && (
-            <p className="mono text-xs">
+            <p className="text-xs">
               Ubicación actual:{' '}
               <a href={branch.maps_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[#D85A30] underline underline-offset-2">ver en el mapa <ExternalLink size={12} aria-hidden="true" /></a>
             </p>
@@ -249,16 +249,16 @@ function BranchLocationModal({ branch, onClose, onSaved }: { branch: BranchOptio
             <input id="loc-link" value={location} onChange={e => setLocation(e.target.value)} autoFocus
               required={!branch.has_location}
               placeholder="https://maps.app.goo.gl/…"
-              className="mono w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
-            <p className="mono mt-1 text-[11px] text-[#8C7169]">{LOCATION_HELP}</p>
+              className="text-sm w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
+            <p className="mt-1 text-xs text-[#8C7169]">{LOCATION_HELP}</p>
           </div>
           <div>
             <label className="label mb-1 block text-[#58423B]" htmlFor="loc-radius">Radio (metros)</label>
             <input id="loc-radius" type="number" min={50} max={5000} step={50} value={radius} onChange={e => setRadius(e.target.value)}
               className="mono w-32 border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
-            <p className="mono mt-1 text-[11px] text-[#8C7169]">Súbelo si la obra es grande o el GPS falla seguido ahí.</p>
+            <p className="mt-1 text-xs text-[#8C7169]">Súbelo si la obra es grande o el GPS falla seguido ahí.</p>
           </div>
-          {error && <p className="mono text-sm text-[#A32D2D]">Error — {error}</p>}
+          {error && <p className="text-sm text-[#A32D2D]">Error — {error}</p>}
           <div className="flex flex-wrap justify-end gap-3 border-t-2 border-[#E0C0B6] pt-4">
             {branch.has_location && (
               <button type="button" disabled={saving} onClick={() => save({ location: null })}
@@ -313,7 +313,7 @@ function WorkerRow({ w, onOpen }: { w: WorkerDetail; onOpen: () => void }) {
           </span>
           <div className="min-w-0">
             <p className="truncate font-semibold leading-tight">{w.name}</p>
-            <p className="mono truncate text-[11px] text-[#8C7169]">{w.title ?? 'Sin puesto'}</p>
+            <p className="truncate text-xs text-[#8C7169]">{w.title ?? 'Sin puesto'}</p>
           </div>
         </div>
       </td>
@@ -321,24 +321,33 @@ function WorkerRow({ w, onOpen }: { w: WorkerDetail; onOpen: () => void }) {
         {w.active ? (
           <div className="flex flex-wrap gap-1">
             <TodayStatus status={w.today_status} checkinAt={w.checkin_at} />
-            <LocationChip location={w.location} />
+            <LocationChip location={w.location} ownBranch={w.branch_name} />
           </div>
         ) : <span className="chip chip-gray">Baja</span>}
       </td>
-      <td className="mono hidden px-3 py-2 text-xs xl:table-cell">
+      <td className="hidden px-3 py-2 text-sm xl:table-cell">
         {w.crew_name ?? <span className="text-[#8C7169]">—</span>}
-        {w.is_lead && <span className="chip chip-orange ml-1.5">Enc.</span>}
+        {w.is_lead && (
+          <span className="flex items-center gap-1 text-xs font-semibold text-[#A5360D]">
+            <Star size={11} className="fill-current" aria-hidden="true" /> Encargado
+          </span>
+        )}
       </td>
-      <td className="mono hidden px-3 py-2 text-xs text-[#58423B] md:table-cell">
+      <td className="hidden px-3 py-2 text-xs text-[#58423B] md:table-cell">
         {w.last_event ? `${fmtHace(w.last_event.received_at)} · ${(EVENT_LABEL[w.last_event.type] ?? 'mensaje').toLowerCase()}` : 'nunca ha escrito'}
       </td>
-      <td className="mono hidden px-3 py-2 text-xs tabular-nums sm:table-cell">
+      <td className="hidden px-3 py-2 text-xs tabular-nums sm:table-cell">
         {w.active_jobs}
         {w.overdue_jobs > 0 && <span className="font-bold text-[#A32D2D]"> · {w.overdue_jobs} atrasada{w.overdue_jobs > 1 ? 's' : ''}</span>}
       </td>
-      <td className="hidden px-3 py-2 lg:table-cell"><AttendanceStrip codes={w.attendance_30d} /></td>
-      <td className={`mono hidden px-3 py-2 text-xs tabular-nums lg:table-cell ${w.attendance_pct !== null && w.attendance_pct < 90 ? 'font-bold text-[#BA7517]' : ''}`}>
-        {w.attendance_pct !== null ? `${w.attendance_pct}%` : '—'}
+      <td className="hidden px-3 py-2 lg:table-cell"
+        title={w.attendance_pct !== null ? `Vino ${w.attendance_pct}% de los días que le tocaba trabajar` : undefined}>
+        <div className="flex items-center gap-2.5">
+          <AttendanceStrip codes={w.attendance_30d} />
+          <span className={`mono text-xs tabular-nums ${w.attendance_pct !== null && w.attendance_pct < 90 ? 'font-bold text-[#BA7517]' : ''}`}>
+            {w.attendance_pct !== null ? `${w.attendance_pct}%` : '—'}
+          </span>
+        </div>
       </td>
       <td className="px-2 text-[#8C7169]"><ChevronRight size={16} aria-hidden="true" /></td>
     </tr>
@@ -348,12 +357,12 @@ function WorkerRow({ w, onOpen }: { w: WorkerDetail; onOpen: () => void }) {
 function BranchLocationButton({ branch, onClick }: { branch?: BranchOption; onClick: (b: BranchOption) => void }) {
   if (!branch) return null
   return branch.has_location ? (
-    <button onClick={() => onClick(branch)} className="mono ml-auto inline-flex items-center gap-1 text-[11px] text-[#58423B] hover:text-[#D85A30]"
+    <button onClick={() => onClick(branch)} className="ml-auto inline-flex items-center gap-1 text-xs text-[#58423B] hover:text-[#D85A30]"
       title="Los check-ins se comparan con esta ubicación">
       <MapPin size={12} aria-hidden="true" /> Ubicación fijada · cambiar
     </button>
   ) : (
-    <button onClick={() => onClick(branch)} className="mono ml-auto inline-flex items-center gap-1 text-[11px] font-bold text-[#A5360D] underline underline-offset-2 hover:text-[#D85A30]"
+    <button onClick={() => onClick(branch)} className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-[#A5360D] underline underline-offset-2 hover:text-[#D85A30]"
       title="Sin ubicación no se puede verificar que lleguen a la obra">
       <MapPinOff size={12} aria-hidden="true" /> Fijar ubicación de la obra
     </button>
@@ -454,7 +463,7 @@ export function Equipo() {
         {error && (
           <div className="border-2 border-[#A32D2D] bg-[#FFF8F3] px-4 py-3">
             <span className="label text-[#A32D2D]">Error — </span>
-            <span className="mono text-[#A32D2D]">{error}</span>
+            <span className="text-sm text-[#A32D2D]">{error}</span>
           </div>
         )}
 
@@ -486,7 +495,7 @@ export function Equipo() {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Buscar por nombre o teléfono…"
-              className="mono w-full bg-transparent text-sm outline-none placeholder:text-[#8C7169]"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-[#8C7169]"
             />
           </label>
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar equipo">
@@ -514,10 +523,11 @@ export function Equipo() {
             <p className="hl-sm text-[#8C7169]">
               {workers.length === 0 ? 'Todavía no hay trabajadores' : filter === 'faltan' ? 'Hoy no falta nadie' : 'Nadie coincide'}
             </p>
-            {workers.length === 0 && <p className="mono mt-1 text-xs text-[#8C7169]">Agrega al primero con el botón de arriba.</p>}
+            {workers.length === 0 && <p className="mt-1 text-xs text-[#8C7169]">Agrega al primero con el botón de arriba.</p>}
           </div>
         )}
 
+        {groups.length > 0 && <StripLegend className="hidden lg:flex" />}
         {groups.length > 0 && (
           <div className="overflow-x-auto border-2 border-[#2A2622] bg-[#FFF8F3]">
             <table className="w-full min-w-[340px] border-collapse">
@@ -529,18 +539,17 @@ export function Equipo() {
                   <th className="label hidden px-3 py-2 text-left text-[#58423B] xl:table-cell">Cuadrilla</th>
                   <th className="label hidden px-3 py-2 text-left text-[#58423B] md:table-cell">Último reporte</th>
                   <th className="label hidden px-3 py-2 text-left text-[#58423B] sm:table-cell">Tareas</th>
-                  <th className="label hidden px-3 py-2 text-left text-[#58423B] lg:table-cell">Últimos 30 días</th>
-                  <th className="label hidden px-3 py-2 text-left text-[#58423B] lg:table-cell">Asist.</th>
+                  <th className="label hidden px-3 py-2 text-left text-[#58423B] lg:table-cell">Asistencia (30 días)</th>
                   <th className="w-6"><span className="sr-only">Abrir</span></th>
                 </tr>
               </thead>
               {groups.map(([name, ws]) => (
                 <tbody key={name}>
                   <tr className="border-y-2 border-[#2A2622] bg-[#E5DFD3]">
-                    <td colSpan={9} className="px-3 py-1.5">
+                    <td colSpan={8} className="px-3 py-1.5">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         <span className="font-headline text-sm font-semibold uppercase tracking-wide">{name}</span>
-                        <span className="mono text-[11px] text-[#58423B]">{groupSummary(ws)}</span>
+                        <span className="text-xs text-[#58423B]">{groupSummary(ws)}</span>
                         <BranchLocationButton branch={branches.find(b => b.name === name)} onClick={setLocating} />
                       </div>
                     </td>

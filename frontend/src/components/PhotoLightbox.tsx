@@ -78,8 +78,8 @@ export function PhotoThumb({ url, label, onOpen, className = '', duplicate = fal
     >
       <img src={url} alt={label ?? 'Evidencia'} className="h-full w-full object-cover transition-opacity group-hover:opacity-85" loading="lazy" />
       {duplicate && (
-        <span className="chip chip-amber absolute left-1 top-1 inline-flex items-center gap-1" title="Se ve igual a una foto anterior">
-          <Copy size={10} aria-hidden="true" /> Repetida
+        <span className="absolute left-1 top-1 inline-flex items-center gap-0.5 border border-[#2A2622] bg-[#BA7517] px-1 text-[10px] font-semibold leading-4 text-white" title="Se ve igual a una foto anterior">
+          <Copy size={9} aria-hidden="true" /> Repetida
         </span>
       )}
       {label && (

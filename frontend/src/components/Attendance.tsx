@@ -21,6 +21,24 @@ export function AttendanceStrip({ codes }: { codes: DayCode[] }) {
   )
 }
 
+/** Qué significa cada barra de AttendanceStrip. */
+export function StripLegend({ className = '' }: { className?: string }) {
+  const items: [string, string, string][] = [
+    ['bg-[#2A2622]', 'h-3', 'A tiempo'], ['bg-[#BA7517]', 'h-3', 'Tarde'],
+    ['bg-[#A32D2D]', 'h-1.5', 'Faltó'], ['bg-[#E0C0B6]', 'h-1', 'Descanso'],
+  ]
+  return (
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#58423B] ${className}`}>
+      <span className="font-semibold">Asistencia, últimos 30 días:</span>
+      {items.map(([bg, h, label]) => (
+        <span key={label} className="inline-flex items-end gap-1">
+          <i className={`block w-1 ${bg} ${h}`} aria-hidden="true" />{label}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 /** Calendario de la ficha: un cuadro por día. */
 export function AttendanceCalendar({ days }: { days: { date: string; code: DayCode }[] }) {
   return (

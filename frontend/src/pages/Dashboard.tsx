@@ -14,30 +14,32 @@ const POLL_PASSIVE_MS = 60_000
 export function Dashboard({ userName, onNavigate }: { userName: string; onNavigate: (p: Page) => void }) {
   const [data, setData] = useState<TodayResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  // Solo cuando el dueño aprieta Actualizar: el refresco automático cada 10 s es silencioso.
+  const [refreshing, setRefreshing] = useState(false)
   const [photo, setPhoto] = useState<LightboxEntry | null>(null)
   const mounted = useRef(true)
   const { version } = useWorkerDrawer()
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (manual = false) => {
+    if (manual) setRefreshing(true)
     try {
       const r = await fetchToday()
       if (mounted.current) { setData(r); setError(null) }
     } catch (e) {
       if (mounted.current) setError(e instanceof Error ? e.message : 'Error al cargar')
     } finally {
-      if (mounted.current) setLoading(false)
+      if (manual && mounted.current) setRefreshing(false)
     }
   }, [])
 
   useEffect(() => {
     mounted.current = true
     load()
-    let id = setInterval(load, document.hidden ? POLL_PASSIVE_MS : POLL_ACTIVE_MS)
+    const poll = () => load()
+    let id = setInterval(poll, document.hidden ? POLL_PASSIVE_MS : POLL_ACTIVE_MS)
     function onVisibility() {
       clearInterval(id)
-      id = setInterval(load, document.hidden ? POLL_PASSIVE_MS : POLL_ACTIVE_MS)
+      id = setInterval(poll, document.hidden ? POLL_PASSIVE_MS : POLL_ACTIVE_MS)
       if (!document.hidden) load()
     }
     document.addEventListener('visibilitychange', onVisibility)
@@ -59,9 +61,9 @@ export function Dashboard({ userName, onNavigate }: { userName: string; onNaviga
             {data ? `${data.greeting}${userName ? `, ${firstName(userName)}` : ''}` : 'Hoy'}
           </h1>
         </div>
-        <button onClick={load} disabled={loading} className="btn btn-primary px-3 py-2.5" aria-label="Actualizar">
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          <span className="hidden sm:inline">{loading ? 'Cargando…' : 'Actualizar'}</span>
+        <button onClick={() => load(true)} disabled={refreshing} className="btn btn-primary px-3 py-2.5" aria-label="Actualizar">
+          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+          <span className="hidden sm:inline">{refreshing ? 'Cargando…' : 'Actualizar'}</span>
         </button>
       </header>
 
@@ -69,7 +71,7 @@ export function Dashboard({ userName, onNavigate }: { userName: string; onNaviga
         {error && (
           <div className="border-2 border-[#A32D2D] bg-[#FFF8F3] px-4 py-3">
             <span className="label text-[#A32D2D]">No se pudo cargar — </span>
-            <span className="mono text-[#A32D2D]">{error}</span>
+            <span className="text-sm text-[#A32D2D]">{error}</span>
           </div>
         )}
 
@@ -119,7 +121,7 @@ function AttentionList({ items, onNavigate }: { items: AttentionItem[]; onNaviga
     <section className="border-2 border-[#2A2622] bg-[#FFF8F3] shadow-hard" aria-labelledby="attn-title">
       <div className="flex items-center justify-between gap-3 border-b-2 border-[#2A2622] bg-[#2A2622] px-4 py-3 text-white">
         <h2 id="attn-title" className="hl-sm">Necesita tu atención</h2>
-        <span className="mono text-xs text-[#F4C6B4]">
+        <span className="text-xs text-[#F4C6B4]">
           {items.length === 0 ? 'nada pendiente' : `${plural(items.length, 'pendiente', 'pendientes')}${urgent ? ` · ${urgent} urgente${urgent > 1 ? 's' : ''}` : ''}`}
         </span>
       </div>
@@ -129,7 +131,7 @@ function AttentionList({ items, onNavigate }: { items: AttentionItem[]; onNaviga
           <CheckCircle2 size={28} className="shrink-0 text-[#639922]" aria-hidden="true" />
           <div>
             <p className="font-semibold">Todo en orden.</p>
-            <p className="mono text-xs text-[#8C7169]">Nadie falta, no hay tareas atrasadas ni fotos por revisar.</p>
+            <p className="text-xs text-[#8C7169]">Nadie falta, no hay tareas atrasadas ni fotos por revisar.</p>
           </div>
         </div>
       ) : (
@@ -149,7 +151,7 @@ function AttentionList({ items, onNavigate }: { items: AttentionItem[]; onNaviga
                     </>
                   ) : item.title}
                 </p>
-                <p className="mono mt-0.5 text-xs text-[#8C7169]">{item.detail}</p>
+                <p className="mt-0.5 text-xs text-[#8C7169]">{item.detail}</p>
               </div>
               <div className="col-start-2 flex items-center gap-2 px-4 pb-3 sm:col-start-3 sm:py-3">
                 {item.action === 'whatsapp' && item.phone_number && (
@@ -178,12 +180,12 @@ function AttentionList({ items, onNavigate }: { items: AttentionItem[]; onNaviga
 // ─── Métricas ─────────────────────────────────────────────────────────────────
 
 function Delta({ now, prev, unit, invert }: { now: number | null; prev: number | null; unit: string; invert?: boolean }) {
-  if (now === null || prev === null) return <span className="mono text-xs text-[#8C7169]">sin datos de la semana pasada</span>
+  if (now === null || prev === null) return <span className="text-xs text-[#8C7169]">sin datos de la semana pasada</span>
   const d = now - prev
-  if (d === 0) return <span className="mono text-xs text-[#58423B]">igual que la semana pasada</span>
+  if (d === 0) return <span className="text-xs text-[#58423B]">igual que la semana pasada</span>
   const good = invert ? d < 0 : d > 0
   return (
-    <span className={`mono inline-flex items-center gap-0.5 text-xs ${good ? 'text-[#4F7D1A]' : 'text-[#A32D2D]'}`}>
+    <span className={`inline-flex items-center gap-0.5 text-xs ${good ? 'text-[#4F7D1A]' : 'text-[#A32D2D]'}`}>
       {d > 0 ? <ArrowUp size={12} aria-label="subió" /> : <ArrowDown size={12} aria-label="bajó" />} {Math.abs(d)}{unit} vs semana pasada
     </span>
   )
@@ -210,7 +212,7 @@ function MetricTiles({ m }: { m: Metrics }) {
         <span className="hl-lg leading-none tabular-nums">
           {a.present}<span className="text-xl text-[#8C7169]">/{a.expected}</span>
         </span>
-        <span className="mono text-xs text-[#58423B]">
+        <span className="text-xs text-[#58423B]">
           {a.rest_day ? 'hoy es día de descanso' : a.present === a.expected ? 'equipo completo' : `faltan ${a.expected - a.present}`}
         </span>
       </Tile>
@@ -228,7 +230,7 @@ function MetricTiles({ m }: { m: Metrics }) {
         chart={<Sparkbars values={m.closed.series} days={m.days} format={v => plural(v, 'tarea cerrada', 'tareas cerradas')} label="Tareas cerradas por día" />}
       >
         <span className="hl-lg leading-none tabular-nums">{m.closed.week}</span>
-        <span className="mono text-xs text-[#58423B]">{m.closed.week_with_photo} con foto de evidencia</span>
+        <span className="text-xs text-[#58423B]">{m.closed.week_with_photo} con foto de evidencia</span>
         <Delta now={m.closed.week} prev={m.closed.prev_week} unit="" />
       </Tile>
       <Tile
@@ -236,7 +238,7 @@ function MetricTiles({ m }: { m: Metrics }) {
         chart={<Sparkbars values={m.overdue.series} days={m.days} format={v => plural(v, 'atrasada', 'atrasadas')} bad label="Tareas atrasadas por día" />}
       >
         <span className={`hl-lg leading-none tabular-nums ${m.overdue.now > 0 ? 'text-[#A32D2D]' : ''}`}>{m.overdue.now}</span>
-        <span className="mono text-xs text-[#58423B]">
+        <span className="text-xs text-[#58423B]">
           de {m.overdue.active} activas · {plural(m.overdue.due_this_week, 'vence', 'vencen')} esta semana
         </span>
       </Tile>
@@ -271,7 +273,7 @@ function BranchTable({ branches }: { branches: BranchStat[] }) {
         <h2 className="hl-sm">Sucursales</h2>
         <span className="label text-[#8C7169]">semáforo de hoy</span>
       </div>
-      {branches.length === 0 && <p className="mono px-4 py-8 text-center text-[#8C7169]">No hay sucursales todavía.</p>}
+      {branches.length === 0 && <p className="text-sm px-4 py-8 text-center text-[#8C7169]">No hay sucursales todavía.</p>}
       <ul>
         {branches.map(b => {
           const s = SEMAFORO[b.semaforo]
@@ -281,7 +283,7 @@ function BranchTable({ branches }: { branches: BranchStat[] }) {
               <span className={s.bar} aria-hidden="true" />
               <div className="px-4 py-3">
                 <p className="hl-sm text-[17px] leading-tight">{b.name}</p>
-                <p className="mono text-[11px] text-[#8C7169]">
+                <p className="text-xs text-[#8C7169]">
                   {b.jobs_review > 0 ? `${b.jobs_review} por revisar · ` : ''}{b.jobs_open} tareas abiertas
                 </p>
               </div>
@@ -326,7 +328,7 @@ function Feed({ items, onPhoto }: { items: FeedItem[]; onPhoto: (e: LightboxEntr
         <h2 className="hl-sm">Lo último que llegó</h2>
         <span className="label text-[#8C7169]">en vivo</span>
       </div>
-      {items.length === 0 && <p className="mono px-4 py-8 text-center text-[#8C7169]">Hoy todavía no llega nada.</p>}
+      {items.length === 0 && <p className="text-sm px-4 py-8 text-center text-[#8C7169]">Hoy todavía no llega nada.</p>}
       <ul>
         {items.map(e => (
           <li key={e.id} className="grid grid-cols-[72px_1fr] gap-2 border-b-2 border-[#E0C0B6] px-4 py-2.5 last:border-b-0">
@@ -340,7 +342,7 @@ function Feed({ items, onPhoto }: { items: FeedItem[]; onPhoto: (e: LightboxEntr
                 {e.job_title && <> · <b className="font-semibold">{e.job_title}</b></>}
               </p>
               {e.text && e.type !== 'checkin' && (
-                <p className="mono truncate text-[11px] text-[#8C7169]">"{e.text}"</p>
+                <p className="truncate text-xs text-[#8C7169]">"{e.text}"</p>
               )}
               {e.media_url && e.type === 'photo' && (
                 <PhotoThumb

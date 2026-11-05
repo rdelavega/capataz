@@ -92,11 +92,11 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
               <h2 className="hl-md leading-tight text-[#2A2622]">{w?.name ?? 'Cargando…'}</h2>
               {w && (
                 <>
-                  <p className="mono text-xs text-[#58423B]">
+                  <p className="text-xs text-[#58423B]">
                     {[w.title, w.branch_name].filter(Boolean).join(' · ') || 'Sin puesto'}
                   </p>
                   {w.crew_name && (
-                    <p className="mono text-xs text-[#58423B]">
+                    <p className="text-xs text-[#58423B]">
                       Cuadrilla {w.crew_name}
                       {w.is_lead && <span className="chip chip-orange ml-1.5 align-middle">Encargado</span>}
                     </p>
@@ -128,7 +128,7 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
           )}
         </div>
 
-        {error && <p className="mono px-5 py-6 text-[#A32D2D]">{error}</p>}
+        {error && <p className="text-sm px-5 py-6 text-[#A32D2D]">{error}</p>}
         {!data && !error && <div className="m-5 h-64 animate-pulse border-2 border-[#E0C0B6]" />}
 
         {data && w && (
@@ -147,7 +147,7 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
               </div>
               <AttendanceCalendar days={data.calendar} />
               {(data.month.days_late > 0 || data.month.days_absent > 0) && (
-                <p className="mono text-xs text-[#58423B]">
+                <p className="text-xs text-[#58423B]">
                   {[
                     data.month.days_late > 0 && `Llegó tarde ${data.month.days_late} ${data.month.days_late === 1 ? 'vez' : 'veces'}`,
                     data.month.days_absent > 0 && `faltó ${data.month.days_absent} ${data.month.days_absent === 1 ? 'día' : 'días'}`,
@@ -159,7 +159,7 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
             {/* Hoy */}
             <Section title="Hoy" aside={`${data.today.length} ${data.today.length === 1 ? 'reporte' : 'reportes'}`}>
               {data.today.length === 0 ? (
-                <p className="mono text-sm text-[#8C7169]">Hoy no ha mandado nada.</p>
+                <p className="text-sm text-[#8C7169]">Hoy no ha mandado nada.</p>
               ) : (
                 <ol className="space-y-0">
                   {data.today.map((e, i) => (
@@ -195,7 +195,7 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
             {/* Tareas */}
             <Section title="Sus trabajos" aside={`${data.jobs.length} ${data.jobs.length === 1 ? 'abierto' : 'abiertos'}`}>
               {data.jobs.length === 0 ? (
-                <p className="mono text-sm text-[#8C7169]">Ni él ni su cuadrilla tienen trabajos abiertos.</p>
+                <p className="text-sm text-[#8C7169]">Ni él ni su cuadrilla tienen trabajos abiertos.</p>
               ) : (
                 <ul className="space-y-2">
                   {data.jobs.map(j => {
@@ -207,7 +207,7 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
                       <li key={j.id} className={`grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 border-2 border-l-[6px] border-[#2A2622] ${border} px-3 py-2`}>
                         <b className="text-sm font-semibold">{j.title}</b>
                         <span className={chip.cls}>{chip.label}</span>
-                        <small className="mono text-[11px] text-[#8C7169]">
+                        <small className="text-xs text-[#8C7169]">
                           {j.status === 'por_revisar' && j.completed_at
                             ? `Terminó ${fmtDia(j.completed_at)} ${fmtHora(j.completed_at)}`
                             : j.due_date ? `Vence ${fmtDia(j.due_date)}` : 'Sin fecha'}
@@ -337,7 +337,7 @@ function AdminSection({ crewId, branchId, workerId, name, title, active, onChang
             onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditing(false) }}
             autoFocus
             placeholder="Albañil, Electricista…"
-            className="mono flex-1 border-2 border-[#D85A30] bg-white px-2 py-1 text-sm outline-none"
+            className="flex-1 border-2 border-[#D85A30] bg-white px-2 py-1 text-sm outline-none"
           />
           <button className="btn btn-primary" disabled={busy} onClick={saveTitle}>Guardar</button>
           <button className="btn" onClick={() => setEditing(false)}>Cancelar</button>
@@ -360,7 +360,7 @@ function AdminSection({ crewId, branchId, workerId, name, title, active, onChang
           </div>
         </div>
       )}
-      {err && <p className="mono text-xs text-[#A32D2D]">{err}</p>}
+      {err && <p className="text-xs text-[#A32D2D]">{err}</p>}
     </section>
   )
 }
@@ -396,7 +396,7 @@ function Placement({ workerId, crewId, branchId, onChanged }: {
     }
   }
 
-  const sel = 'mono mt-1 w-full border-2 border-[#2A2622] bg-white px-2 py-1.5 text-sm outline-none focus:border-[#D85A30] disabled:opacity-50'
+  const sel = 'mt-1 w-full border-2 border-[#2A2622] bg-white px-2 py-1.5 text-sm outline-none focus:border-[#D85A30] disabled:opacity-50'
   return (
     <div className="grid grid-cols-2 gap-3">
       <div>
@@ -415,7 +415,7 @@ function Placement({ workerId, crewId, branchId, onChanged }: {
           {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
       </div>
-      {err && <p className="mono col-span-2 text-xs text-[#A32D2D]">{err}</p>}
+      {err && <p className="col-span-2 text-xs text-[#A32D2D]">{err}</p>}
     </div>
   )
 }

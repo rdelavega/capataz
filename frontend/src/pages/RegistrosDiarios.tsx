@@ -1,4 +1,4 @@
-import { ExternalLink, MapPin } from 'lucide-react'
+import { Copy, ExternalLink, MapPin } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { EventLog, EventsResponse } from '../api/client'
 import { fetchEvents } from '../api/client'
@@ -35,11 +35,8 @@ function EventRow({ ev, onPhoto }: { ev: EventLog; onPhoto: (entry: LightboxEntr
   return (
     <tr className="border-b border-[#E0C0B6] hover:bg-[#FDF2E4] transition-colors">
       <td className="mono whitespace-nowrap px-4 py-3 text-[#2A2622]">{fmtTime(ev.received_at)}</td>
-      <td className="px-4 py-3">
-        <span className="label text-[#58423B]">{ev.branch_name ?? '—'}</span>
-      </td>
-      <td className="px-4 py-3">
-        <span className="label text-[#2A2622]">{ev.worker_name ?? <span className="text-[#8C7169]">Desconocido</span>}</span>
+      <td className="whitespace-nowrap px-4 py-3">
+        <span className="text-sm font-semibold text-[#2A2622]">{ev.worker_name ?? <span className="font-normal text-[#8C7169]">Desconocido</span>}</span>
       </td>
       <td className="px-4 py-3">
         <span className={TYPE_CHIP[ev.event_type] ?? 'chip chip-gray'}>
@@ -64,7 +61,9 @@ function EventRow({ ev, onPhoto }: { ev: EventLog; onPhoto: (entry: LightboxEntr
             </div>
           </button>
           {ev.duplicate_of && (
-            <span className="chip chip-amber" title="Se ve igual a una foto anterior. Ábrela para compararlas.">Repetida</span>
+            <span className="inline-flex items-center gap-1 border border-[#2A2622] bg-[#BA7517] px-1.5 text-xs font-semibold leading-5 text-white" title="Se ve igual a una foto anterior. Ábrela para compararlas.">
+              <Copy size={11} aria-hidden="true" /> Repetida
+            </span>
           )}
           </div>
         ) : (
@@ -80,16 +79,16 @@ function EventRow({ ev, onPhoto }: { ev: EventLog; onPhoto: (entry: LightboxEntr
               </a>
             )}
             {content && (
-              <p className="mono mt-0.5 truncate text-[#2A2622]">{content}</p>
+              <p className="text-sm mt-0.5 truncate text-[#2A2622]">{content}</p>
             )}
             {ev.location_label && (
-              <p className="mono inline-flex items-center gap-1 text-[#58423B]">
+              <p className="text-sm inline-flex items-center gap-1 text-[#58423B]">
                 <MapPin size={13} aria-hidden="true" className="shrink-0" />
                 {ev.location_label}
               </p>
             )}
             {!ev.media_url && !content && !ev.location_label && (
-              <span className="mono text-[#8C7169]">—</span>
+              <span className="text-sm text-[#8C7169]">—</span>
             )}
           </>
         )}
@@ -159,14 +158,14 @@ export function RegistrosDiarios() {
         {error && (
           <div className="border-2 border-[#A32D2D] bg-[#FFF8F3] px-4 py-3">
             <span className="label text-[#A32D2D]">Error — </span>
-            <span className="mono text-[#A32D2D]">{error}</span>
+            <span className="text-sm text-[#A32D2D]">{error}</span>
           </div>
         )}
 
         {data && data.events.length === 0 && (
           <div className="border-2 border-[#E0C0B6] bg-[#FFF8F3] px-6 py-12 text-center">
             <p className="hl-sm text-[#8C7169]">Sin registros</p>
-            <p className="mono mt-2 text-[#8C7169]">No hay mensajes para esta fecha.</p>
+            <p className="text-sm mt-2 text-[#8C7169]">No hay mensajes para esta fecha.</p>
           </div>
         )}
 
@@ -182,10 +181,10 @@ export function RegistrosDiarios() {
                 <span className="label text-white">Bitácora de mensajes</span>
                 <span className="label text-[#8C7169]">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
               </div>
-              <table className="w-full min-w-[700px]">
+              <table className="w-full min-w-[560px]">
                 <thead>
                   <tr className="border-b-2 border-[#2A2622] bg-[#ECE1D3]">
-                    {['Hora', 'Sucursal', 'Trabajador', 'Tipo', 'Contenido'].map(h => (
+                    {['Hora', 'Trabajador', 'Tipo', 'Contenido'].map(h => (
                       <th key={h} className="label px-4 py-2 text-left text-[#58423B]">{h}</th>
                     ))}
                   </tr>

@@ -58,6 +58,11 @@ export function initials(name: string): string {
   return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase()
 }
 
+/** '350 m' / '2.4 km' (igual que el backend). */
+export function fmtDistance(meters: number): string {
+  return meters < 1000 ? `${Math.round(meters / 10) * 10} m` : `${(meters / 1000).toFixed(1)} km`
+}
+
 export function firstName(name: string | null | undefined): string {
   return (name ?? '').split(' ')[0]
 }
