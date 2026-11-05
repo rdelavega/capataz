@@ -249,7 +249,7 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
 
     photo_files = sorted(
         p for p in (fotos.iterdir() if fotos else [])
-        if (mimetypes.guess_type(p.name)[0] or "").startswith("image/")
+        if _is_web_image(p)
     )
     if fotos and not photo_files:
         print(f"⚠ No encontré imágenes en {fotos}")
@@ -470,6 +470,14 @@ async def _seed_history(session, company_id: uuid.UUID, giro: str, workers: list
     return photos
 
 
+WEB_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+
+def _is_web_image(p: Path) -> bool:
+    """Solo formatos que cualquier navegador muestra (HEIC del iPhone no)."""
+    return mimetypes.guess_type(p.name)[0] in WEB_IMAGE_TYPES
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--giro", choices=sorted(GIROS), required=True)
@@ -478,6 +486,23 @@ def main() -> None:
     parser.add_argument("--fotos", type=Path, help="Carpeta con imágenes del giro (se suben a R2)")
     parser.add_argument("--si", action="store_true", help="No pedir confirmación")
     args = parser.parse_args()
+
+    # Validar antes de pedir confirmación: si algo falla, que sea antes de borrar nada.
+    if args.fotos:
+        args.fotos = args.fotos.expanduser()
+        if not args.fotos.is_dir():
+            raise SystemExit(
+                f"No existe la carpeta de fotos {args.fotos}.\n"
+                "Ojo: corre este script en tu máquina con `railway run`, no dentro del "
+                "contenedor (`railway ssh`): ahí no están tus fotos."
+            )
+        files = list(args.fotos.iterdir())
+        if heic := [p.name for p in files if p.suffix.lower() in (".heic", ".heif")]:
+            print(f"⚠ Se ignoran {len(heic)} fotos HEIC (el navegador no las muestra): expórtalas como JPG")
+        if not any(_is_web_image(p) for p in files):
+            raise SystemExit(f"No hay imágenes jpg, png o webp en {args.fotos}")
+        if not (settings.r2_account_id and settings.r2_access_key_id and settings.r2_public_url):
+            raise SystemExit("Faltan las variables de R2: sin ellas las fotos no se pueden subir.")
 
     if not args.si:
         host = settings.database_url.split("@")[-1].split("/")[0]

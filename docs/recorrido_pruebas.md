@@ -30,9 +30,11 @@ dashboard. Al final repite lo del dashboard **desde el celular**.
 - [ ] **R2 y OpenAI configurados** en Railway (sin R2 no hay fotos; sin OpenAI
       no hay transcripción de audios).
 - [ ] **Datos de demo**:
+      En **tu máquina** (no con `railway ssh`: dentro del contenedor no están tus
+      fotos). `railway run` corre el script aquí con las variables de Railway:
       ```bash
       cd backend
-      railway run python3 seed_demo.py --giro construccion \
+      railway run .venv/bin/python seed_demo.py --giro construccion \
           --empresa "Constructora Pech" --mi-numero "<tu cel>" \
           --fotos ~/demo_fotos/construccion
       ```

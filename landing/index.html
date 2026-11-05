@@ -75,6 +75,7 @@ a { color: inherit; }
 .b { background: #fff; padding: 7px 9px 5px; font-size: 13px; line-height: 1.4; max-width: 92%; border-radius: 0 8px 8px 8px; box-shadow: 0 1px 0 rgba(0,0,0,.12); }
 .b.me { justify-self: end; background: #DCF8C6; border-radius: 8px 0 8px 8px; }
 .b .ts { display: block; text-align: right; font-size: 10px; color: #8a8a8a; }
+.b .ts .tick { display: inline-block; width: 13px; height: 13px; margin-left: 2px; vertical-align: -3px; color: #53bdeb; }
 .b .ph { height: 74px; margin: 2px 0 4px; background: repeating-linear-gradient(115deg, rgba(0,0,0,.06) 0 6px, transparent 6px 14px), linear-gradient(160deg, #B9AE9E, #6E675E); }
 .panel { position: absolute; right: 0; top: 250px; width: 340px; z-index: 3; border: 2px solid var(--ink); background: var(--paper); box-shadow: 6px 6px 0 var(--ink); }
 .panel h3 { background: var(--ink); color: #fff; font-size: 15px; padding: 10px 14px; display: flex; justify-content: space-between; }
@@ -198,10 +199,10 @@ footer a { color: #D9CCBF; }
         <div class="phone">
           <div class="phone-top">Capataz<small>cuenta de empresa</small></div>
           <div class="chat">
-            <div class="b me">Presente<span class="ts">7:42 a.m. ✓✓</span></div>
-            <div class="b">✅ ¡Presente! Buenos días, Luis. Tu registro quedó guardado.<span class="ts">7:42 a.m.</span></div>
-            <div class="b me"><div class="ph"></div>Ya quedó la losa<span class="ts">10:15 a.m. ✓✓</span></div>
-            <div class="b">📸 Foto recibida para <b>Colado de losa 2º piso</b>. Ya le avisé a tu jefe.<span class="ts">10:15 a.m.</span></div>
+            <div class="b me">Presente<span class="ts">7:42 a.m. <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg></span></div>
+            <div class="b">¡Presente! Buenos días, Luis. Tu registro quedó guardado.<span class="ts">7:42 a.m.</span></div>
+            <div class="b me"><div class="ph"></div>Ya quedó la losa<span class="ts">10:15 a.m. <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg></span></div>
+            <div class="b">Foto recibida para <b>Colado de losa 2º piso</b>. Ya le avisé a tu jefe.<span class="ts">10:15 a.m.</span></div>
           </div>
         </div>
         <div class="panel">

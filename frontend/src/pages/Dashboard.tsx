@@ -1,4 +1,4 @@
-import { CheckCircle2, MessageCircle, RefreshCw } from 'lucide-react'
+import { ArrowDown, ArrowUp, CheckCircle2, MessageCircle, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AttentionItem, BranchStat, FeedItem, Metrics, TodayResponse } from '../api/client'
 import { fetchToday } from '../api/client'
@@ -183,8 +183,8 @@ function Delta({ now, prev, unit, invert }: { now: number | null; prev: number |
   if (d === 0) return <span className="mono text-xs text-[#58423B]">igual que la semana pasada</span>
   const good = invert ? d < 0 : d > 0
   return (
-    <span className={`mono text-xs ${good ? 'text-[#4F7D1A]' : 'text-[#A32D2D]'}`}>
-      {d > 0 ? '▲' : '▼'} {Math.abs(d)}{unit} vs semana pasada
+    <span className={`mono inline-flex items-center gap-0.5 text-xs ${good ? 'text-[#4F7D1A]' : 'text-[#A32D2D]'}`}>
+      {d > 0 ? <ArrowUp size={12} aria-label="subió" /> : <ArrowDown size={12} aria-label="bajó" />} {Math.abs(d)}{unit} vs semana pasada
     </span>
   )
 }

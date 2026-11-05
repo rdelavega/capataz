@@ -91,6 +91,10 @@ WhatsApp (trabajador)
 - Nombres de tablas y columnas en `snake_case`, inglés (el schema ya está así).
 - Contenido visible al usuario (mensajes del bot, dashboard) en **español
   mexicano**, tono directo y simple (el dueño promedio no es técnico).
+- **Sin emojis en el dashboard ni en la landing**: íconos de `lucide-react` en
+  el dashboard y SVG en línea en la landing (flechas incluidas: `ExternalLink`,
+  `ArrowUp`…). Los mensajes del bot en WhatsApp sí llevan emojis; si la landing
+  imita una conversación, se escribe el texto sin ellos.
 - Variables de entorno para todos los secretos (WhatsApp token, DB url, R2
   keys, Whisper API key) — usar `.env` + `pydantic-settings`.
 - Idempotencia siempre: cualquier handler de webhook debe poder recibir el

@@ -1,4 +1,4 @@
-import { ChevronRight, MapPin, MapPinOff, RefreshCw, Search, X } from 'lucide-react'
+import { ChevronRight, ExternalLink, MapPin, MapPinOff, RefreshCw, Search, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { BranchOption, CrewData, WorkerDetail, WorkersResponse } from '../api/client'
 import { createBranch, createWorker, fetchBranches, fetchCrews, fetchWorkers, updateBranch } from '../api/client'
@@ -239,7 +239,7 @@ function BranchLocationModal({ branch, onClose, onSaved }: { branch: BranchOptio
           {branch.has_location && branch.maps_url && (
             <p className="mono text-xs">
               Ubicación actual:{' '}
-              <a href={branch.maps_url} target="_blank" rel="noreferrer" className="text-[#D85A30] underline underline-offset-2">ver en el mapa ↗</a>
+              <a href={branch.maps_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[#D85A30] underline underline-offset-2">ver en el mapa <ExternalLink size={12} aria-hidden="true" /></a>
             </p>
           )}
           <div>

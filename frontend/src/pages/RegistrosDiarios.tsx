@@ -1,3 +1,4 @@
+import { ExternalLink, MapPin } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { EventLog, EventsResponse } from '../api/client'
 import { fetchEvents } from '../api/client'
@@ -73,16 +74,19 @@ function EventRow({ ev, onPhoto }: { ev: EventLog; onPhoto: (entry: LightboxEntr
                 href={ev.media_url}
                 target="_blank"
                 rel="noreferrer"
-                className="label text-[#D85A30] underline underline-offset-2"
+                className="label inline-flex items-center gap-1 text-[#D85A30] underline underline-offset-2"
               >
-                Ver archivo ↗
+                Ver archivo <ExternalLink size={12} aria-hidden="true" />
               </a>
             )}
             {content && (
               <p className="mono mt-0.5 truncate text-[#2A2622]">{content}</p>
             )}
             {ev.location_label && (
-              <p className="mono text-[#58423B]">📍 {ev.location_label}</p>
+              <p className="mono inline-flex items-center gap-1 text-[#58423B]">
+                <MapPin size={13} aria-hidden="true" className="shrink-0" />
+                {ev.location_label}
+              </p>
             )}
             {!ev.media_url && !content && !ev.location_label && (
               <span className="mono text-[#8C7169]">—</span>

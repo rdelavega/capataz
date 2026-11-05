@@ -12,9 +12,11 @@ secundario en esta etapa.
       carpeta local. Sin fotos la demo pierde mucho.
 - [ ] **Preparar los datos** (BORRA los datos de la empresa en producción: no
       correr si ya hay un cliente piloto ahí; ver "Ambiente de demo" abajo):
+      En **tu máquina** (no con `railway ssh`: dentro del contenedor no están tus
+      fotos). `railway run` corre el script aquí con las variables de Railway:
       ```bash
       cd backend
-      railway run python3 seed_demo.py --giro construccion \
+      railway run .venv/bin/python seed_demo.py --giro construccion \
           --empresa "Constructora Pech" --mi-numero "999 123 4567" \
           --fotos ~/demo_fotos/construccion
       ```
