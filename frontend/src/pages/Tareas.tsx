@@ -6,6 +6,7 @@ import { NewJobModal } from '../components/NewJobModal'
 import { PhotoLightbox, PhotoThumb, type LightboxEntry } from '../components/PhotoLightbox'
 import { useWorkerDrawer } from '../components/WorkerDrawer'
 import { compareWith, fmtCuando, fmtDia, fmtHora, firstName, initials, parseDay, plural, waLink } from '../lib/format'
+import { usePolling } from '../lib/usePolling'
 
 type Column = 'atrasadas' | 'por_revisar' | 'en_curso' | 'terminadas'
 
@@ -42,20 +43,21 @@ export function Tareas() {
   const [notice, setNotice]   = useState<string | null>(null)
   const { version, bump } = useWorkerDrawer()
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       setJobs((await fetchJobs()).jobs)
       setNow(Date.now())
       setErr(null)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Error al cargar')
+      if (!silent) setErr(e instanceof Error ? e.message : 'Error al cargar')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [])
 
   useEffect(() => { load() }, [load, version])
+  usePolling(useCallback(() => { load(true) }, [load]))
 
   const branches = useMemo(
     () => [...new Set(jobs.map(j => j.branch_name).filter((b): b is string => !!b))].sort(),
@@ -109,7 +111,7 @@ export function Tareas() {
         </div>
         <div className="ml-auto flex gap-2">
           <button onClick={() => setShowModal(true)} className="btn btn-primary">+ Nuevo trabajo</button>
-          <button onClick={load} disabled={loading} className="btn" aria-label="Actualizar">
+          <button onClick={() => load()} disabled={loading} className="btn" aria-label="Actualizar">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
@@ -282,6 +284,12 @@ function JobCard({ job: j, column, onChanged, onPhoto }: {
             />
           ))}
         </div>
+      )}
+      {j.status === 'atrasado' && j.problem_at && (
+        <p className="border-l-[3px] border-[#A32D2D] bg-[#FBEBDD] px-2 py-1 text-xs text-[#2A2622]">
+          <b className="font-semibold text-[#A32D2D]">Problema: </b>
+          {j.problem_note ? `“${j.problem_note}”` : `todavía no dice qué pasó (avisó a las ${fmtHora(j.problem_at)})`}
+        </p>
       )}
       {column === 'por_revisar' && photos.length === 0 && (
         <p className="mono border border-dashed border-[#8C7169] bg-[#F2EDE4] px-2 py-1 text-[11px] text-[#58423B]">

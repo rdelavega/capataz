@@ -8,6 +8,7 @@ import { AttendanceCalendar } from './Attendance'
 import { NewJobModal } from './NewJobModal'
 import { PhotoLightbox, PhotoThumb, type LightboxEntry } from './PhotoLightbox'
 import { LocationChip, TodayStatus } from './TodayStatus'
+import { usePolling } from '../lib/usePolling'
 
 // ─── Contexto: cualquier pantalla puede abrir la ficha ───────────────────────
 
@@ -67,6 +68,7 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
   }, [workerId])
 
   useEffect(() => { setData(null); load() }, [load])
+  usePolling(load)
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && !photo && !newJob) onClose() }

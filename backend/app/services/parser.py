@@ -4,6 +4,7 @@ de mensaje y dispara acciones secundarias (attendance, media, transcripción,
 tareas).
 """
 import logging
+import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
@@ -49,12 +50,29 @@ PHOTO_CHOICE = "foto"
 REVIEW_PHOTO_WINDOW = timedelta(hours=6)
 OPEN_STATUSES = ("pendiente", "en_progreso", "atrasado")
 
+# "Ya terminé" escrito o en audio cuenta igual que el botón. "Listo" no: en México
+# casi siempre quiere decir "ok". Con "no", "todavía", "aún" o "falta" no se toma
+# como terminado ("todavía no terminamos", "ya quedó, falta limpiar").
+_DONE = re.compile(r"\b(termin[eé]|terminamos|terminaron|acab[eé]|acabamos|ya qued[oó])\b", re.I)
+_NOT_DONE = re.compile(r"\b(no|todav[ií]a|a[uú]n|falta|faltan)\b", re.I)
+# Después de "Tengo un problema", su siguiente texto o audio es el motivo.
+PROBLEM_NOTE_WINDOW = timedelta(hours=2)
+
 LOCATION_ASK = "Toca *Enviar ubicación* para confirmar que estás en la obra."
 # Se dice una sola vez por trabajador: para qué se usa su ubicación y para qué no.
 LOCATION_NOTICE = (
     "_Tu ubicación solo se usa para confirmar tu llegada a la obra. "
     "No te seguimos durante el día._"
 )
+
+
+def _is_done(text: str) -> bool:
+    return bool(_DONE.search(text)) and not _NOT_DONE.search(text)
+
+
+def _job_buttons(job: Job, *kinds: str) -> list[dict]:
+    titles = {"completado": "✅ Ya terminé", "atrasado": "🚫 Tengo un problema", "en_progreso": "🔄 En progreso"}
+    return [{"type": "reply", "reply": {"id": f"{k}::{job.id}", "title": titles[k]}} for k in kinds]
 
 
 def _is_checkin(text: str) -> bool:
@@ -150,8 +168,9 @@ async def _safe_send(event_id: uuid.UUID, phone_number: str, body: str) -> None:
         logger.error("event %s: failed to send reply: %s", event_id, e)
 
 
-async def _handle_job_button(session, worker: Worker, nombre: str, payload: str) -> str | None:
-    """Actualiza la tarea según el botón. Devuelve la respuesta para el trabajador."""
+async def _handle_job_button(session, worker: Worker, nombre: str,
+                             payload: str) -> tuple[str, list[dict] | None] | None:
+    """Actualiza la tarea según el botón. Devuelve la respuesta (y sus botones) para el trabajador."""
     status, _, job_id_str = payload.partition("::")
     if status not in JOB_BUTTON_STATUSES:
         return None
@@ -169,29 +188,39 @@ async def _handle_job_button(session, worker: Worker, nombre: str, payload: str)
         return None
 
     if job.status == "completado":
-        return f"👍 *{job.title}* ya estaba aprobada, {nombre}. ¡Gracias!"
+        return f"👍 *{job.title}* ya estaba aprobada, {nombre}. ¡Gracias!", None
 
+    now = datetime.now(tz=timezone.utc)
     if status == "visto":
-        job.acknowledged_at = job.acknowledged_at or datetime.now(tz=timezone.utc)
+        job.acknowledged_at = job.acknowledged_at or now
         return (
             f"👍 Anotado, {nombre}. Cuando terminen *{job.title}*, aprieta *Ya terminé* "
-            "en este mensaje y manda foto."
+            "aquí abajo y manda foto.",
+            _job_buttons(job, "completado", "atrasado"),
         )
 
     if status == "completado":
         # "Terminé" no cierra la tarea: queda por revisar hasta que el dueño ve la foto.
         job.status = "por_revisar"
-        job.completed_at = datetime.now(tz=timezone.utc)
+        job.completed_at = now
         job.review_note = None
+        job.problem_at = job.problem_note = None
         return (
             f"✅ Anotado, {nombre}. Mándame una *foto de cómo quedó* "
-            f"*{job.title}* para que tu jefe la apruebe."
+            f"*{job.title}* para que tu jefe la apruebe.",
+            None,
         )
     if status == "en_progreso":
         job.status = "en_progreso"
-        return f"🔄 Entendido, {nombre}. Cuando avances, manda foto."
+        job.problem_at = job.problem_note = None
+        return f"🔄 Entendido, {nombre}. Cuando avances, manda foto.", None
     job.status = "atrasado"
-    return f"🚫 Anotado, {nombre}. Ya le avisé a tu jefe que tienes un problema con *{job.title}*."
+    job.problem_at, job.problem_note = now, None
+    return (
+        f"🚫 Anotado, {nombre}. ¿Qué pasó con *{job.title}*? Cuéntame en un mensaje o audio "
+        "y se lo paso a tu jefe.",
+        None,
+    )
 
 
 def _can_report(worker: Worker, job: Job) -> bool:
@@ -205,22 +234,20 @@ def _short(title: str, n: int) -> str:
     return title if len(title) <= n else title[: n - 1] + "…"
 
 
-async def _ask_which_job(phone: str, event_id: uuid.UUID, jobs: list[Job]) -> None:
-    """Varios trabajos abiertos: el trabajador elige con un toque de cuál es la foto."""
+async def _ask_which_job(phone: str, body: str, jobs: list[Job], payload_for) -> None:
+    """Varios trabajos abiertos: el trabajador elige con un toque de cuál habla."""
     jobs = sorted(jobs, key=lambda j: (j.due_date is None, j.due_date))
-    body = "📸 Foto recibida. ¿De cuál trabajo es?"
     if len(jobs) <= 3:
         listado = "\n".join(f"{i + 1}. {j.title}" for i, j in enumerate(jobs))
         await whatsapp.send_interactive_buttons(
             phone, f"{body}\n\n{listado}",
-            [{"type": "reply", "reply": {"id": f"{PHOTO_CHOICE}::{event_id}::{j.id}",
-                                         "title": _short(f"{i + 1}. {j.title}", 20)}}
+            [{"type": "reply", "reply": {"id": payload_for(j), "title": _short(f"{i + 1}. {j.title}", 20)}}
              for i, j in enumerate(jobs)],
         )
     else:
         await whatsapp.send_interactive_list(
             phone, body, "Elegir trabajo",
-            [{"id": f"{PHOTO_CHOICE}::{event_id}::{j.id}", "title": _short(j.title, 24),
+            [{"id": payload_for(j), "title": _short(j.title, 24),
               "description": _short(j.title, 72) if len(j.title) > 24 else ""}
              for j in jobs[:10]],
         )
@@ -243,6 +270,30 @@ async def _handle_photo_choice(session, worker: Worker, payload: str) -> str | N
     return f"👍 Listo, la foto quedó en *{job.title}*."
 
 
+def _mine(worker: Worker):
+    """Trabajos de los que puede reportar: los suyos y los de su cuadrilla sin persona asignada."""
+    mine = Job.worker_id == worker.id
+    if worker.crew_id:
+        mine = mine | ((Job.crew_id == worker.crew_id) & Job.worker_id.is_(None))
+    return mine
+
+
+async def _open_jobs(session, worker: Worker) -> list[Job]:
+    return list((await session.execute(
+        select(Job).where(_mine(worker), Job.status.in_(OPEN_STATUSES))
+    )).scalars().all())
+
+
+async def _pending_problem(session, worker: Worker, now: datetime) -> Job | None:
+    """Un trabajo donde apretó "Tengo un problema" hace poco y todavía no dice qué pasó."""
+    return (await session.execute(
+        select(Job).where(
+            _mine(worker), Job.status == "atrasado", Job.problem_note.is_(None),
+            Job.problem_at >= now - PROBLEM_NOTE_WINDOW,
+        ).order_by(Job.problem_at.desc()).limit(1)
+    )).scalar_one_or_none()
+
+
 async def _link_photo_to_job(session, worker: Worker, now: datetime) -> tuple[Job | None, list[Job]]:
     """
     Decide a qué trabajo pertenece una foto. Devuelve (trabajo, opciones):
@@ -250,11 +301,8 @@ async def _link_photo_to_job(session, worker: Worker, now: datetime) -> tuple[Jo
     2. Si solo hay uno abierto, ese (evidencia de avance).
     3. Si hay varios, ninguno: se regresan las opciones para preguntarle.
     """
-    mine = Job.worker_id == worker.id
-    if worker.crew_id:
-        mine = mine | ((Job.crew_id == worker.crew_id) & Job.worker_id.is_(None))
     jobs = (await session.execute(
-        select(Job).where(mine, Job.status.in_(("por_revisar", *OPEN_STATUSES)))
+        select(Job).where(_mine(worker), Job.status.in_(("por_revisar", *OPEN_STATUSES)))
     )).scalars().all()
 
     in_review = [
@@ -321,9 +369,11 @@ async def _process(event_id: uuid.UUID, session) -> None:
     longitude: float | None = None
     transcription_text: str | None = None
     reply: str | None = None
+    reply_buttons: list[dict] | None = None
     already_replied = False
     marked_absent = False
-    ask_choices: list[Job] = []
+    ask_choices: list[Job] = []    # ¿de cuál trabajo es la foto?
+    ask_done: list[Job] = []       # ¿cuál terminaron?
 
     if msg_type == "text":
         text_content = msg.get("text", {}).get("body", "")
@@ -385,7 +435,7 @@ async def _process(event_id: uuid.UUID, session) -> None:
             job_reply = await _handle_job_button(session, worker, nombre, payload)
             if job_reply:
                 event.job_id = uuid.UUID(payload.partition("::")[2])
-                reply = job_reply
+                reply, reply_buttons = job_reply
                 already_replied = True
 
     elif msg_type == "location":
@@ -411,6 +461,10 @@ async def _process(event_id: uuid.UUID, session) -> None:
         )
     )
     attendance = existing.scalar_one_or_none()
+
+    # Lo que dijo en texto o audio, para "ya terminé" y el motivo de un problema
+    said = (transcription_text or text_content or "").strip() \
+        if event_type in ("text", "audio") and not already_replied else ""
 
     location_prompt: str | None = None
     if event_type in ("checkin", "location") and (event_type == "checkin" or latitude is not None):
@@ -478,15 +532,45 @@ async def _process(event_id: uuid.UUID, session) -> None:
         else:
             reply = _ack_reply(event_type, nombre, has_checkin=attendance is not None)
 
+    elif said and _is_done(said):
+        # "Ya terminé" escrito o en audio: igual que el botón
+        open_jobs = await _open_jobs(session, worker)
+        if len(open_jobs) == 1:
+            event.job_id = open_jobs[0].id
+            reply, reply_buttons = await _handle_job_button(
+                session, worker, nombre, f"completado::{open_jobs[0].id}")
+        elif open_jobs:
+            ask_done = open_jobs
+        else:
+            reply = f"👍 Recibido, {nombre}. No tienes trabajos abiertos; si es algo nuevo, avísale a tu jefe."
+
+    elif said and (problem_job := await _pending_problem(session, worker, now)):
+        problem_job.problem_note = said[:500]
+        event.job_id = problem_job.id
+        reply = f"Anotado, {nombre}. Ya le pasé a tu jefe lo que pasó con *{problem_job.title}*."
+
     elif not already_replied:
         reply = _ack_reply(event_type, nombre, has_checkin=attendance is not None)
 
     await session.commit()
     if ask_choices:
         try:
-            await _ask_which_job(phone_number, event_id, ask_choices)
+            await _ask_which_job(phone_number, "📸 Foto recibida. ¿De cuál trabajo es?", ask_choices,
+                                 lambda j: f"{PHOTO_CHOICE}::{event_id}::{j.id}")
         except Exception as e:
             logger.error("event %s: failed to ask which job: %s", event_id, e)
+    if ask_done:
+        try:
+            await _ask_which_job(phone_number, f"👍 Anotado, {nombre}. ¿Cuál terminaron?", ask_done,
+                                 lambda j: f"completado::{j.id}")
+        except Exception as e:
+            logger.error("event %s: failed to ask which job is done: %s", event_id, e)
+    if reply and reply_buttons:
+        try:
+            await whatsapp.send_interactive_buttons(phone_number, reply, reply_buttons)
+            reply = None
+        except Exception as e:
+            logger.error("event %s: failed to send buttons, sending text: %s", event_id, e)
     if location_prompt:
         try:
             await whatsapp.send_location_request(phone_number, location_prompt)

@@ -11,6 +11,7 @@ from app.config import settings
 from app.db import get_db
 from app.models.branch import Branch
 from app.models.event import Event
+from app.models.job import Job
 from app.models.worker import Worker
 from app.services import insights
 from app.services import photos as photo_svc
@@ -77,6 +78,10 @@ async def get_events(
     rows = list(rows.tuples())
     branches = (await session.execute(select(Branch).where(Branch.company_id == company_id))).scalars().all()
     originals = await photo_svc.load_originals(session, [e for e, _, _ in rows])
+    job_ids = {e.job_id for e, _, _ in rows if e.job_id}
+    job_titles = dict((await session.execute(
+        select(Job.id, Job.title).where(Job.id.in_(job_ids))
+    )).tuples().all()) if job_ids else {}
 
     def location_label(event: Event, worker: Worker | None) -> str | None:
         """'En Obra Norte' / 'A 2.3 km de Obra Norte'. Las coordenadas no salen del servidor."""
@@ -104,6 +109,7 @@ async def get_events(
             "media_url": event.media_url,
             "transcription": event.transcription,
             "location_label": location_label(event, worker),
+            "job_title": job_titles.get(event.job_id) if event.job_id else None,
             "duplicate_of": originals.get(event.duplicate_of_id) if event.duplicate_of_id else None,
         })
 

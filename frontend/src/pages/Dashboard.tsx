@@ -7,9 +7,8 @@ import { Sparkbars } from '../components/Sparkbars'
 import { PhotoLightbox, PhotoThumb, type LightboxEntry } from '../components/PhotoLightbox'
 import { useWorkerDrawer } from '../components/WorkerDrawer'
 import { fmtCuando, fmtFechaLarga, fmtHora, firstName, plural, waLink } from '../lib/format'
+import { usePolling } from '../lib/usePolling'
 
-const POLL_ACTIVE_MS  = 10_000
-const POLL_PASSIVE_MS = 60_000
 
 export function Dashboard({ userName, onNavigate }: { userName: string; onNavigate: (p: Page) => void }) {
   const [data, setData] = useState<TodayResponse | null>(null)
@@ -35,20 +34,9 @@ export function Dashboard({ userName, onNavigate }: { userName: string; onNaviga
   useEffect(() => {
     mounted.current = true
     load()
-    const poll = () => load()
-    let id = setInterval(poll, document.hidden ? POLL_PASSIVE_MS : POLL_ACTIVE_MS)
-    function onVisibility() {
-      clearInterval(id)
-      id = setInterval(poll, document.hidden ? POLL_PASSIVE_MS : POLL_ACTIVE_MS)
-      if (!document.hidden) load()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      mounted.current = false
-      clearInterval(id)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
+    return () => { mounted.current = false }
   }, [load])
+  usePolling(useCallback(() => { load() }, [load]))
 
   useEffect(() => { if (version) load() }, [version, load])
 

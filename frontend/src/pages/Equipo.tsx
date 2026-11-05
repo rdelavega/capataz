@@ -7,6 +7,7 @@ import { AttendanceStrip, StripLegend } from '../components/Attendance'
 import { LocationChip, TodayStatus } from '../components/TodayStatus'
 import { useWorkerDrawer } from '../components/WorkerDrawer'
 import { EVENT_LABEL, fmtHace, initials } from '../lib/format'
+import { usePolling } from '../lib/usePolling'
 
 
 // ─── Modal: Agregar trabajador ────────────────────────────────────────────────
@@ -394,8 +395,8 @@ export function Equipo() {
   const [locating, setLocating]               = useState<BranchOption | null>(null)
   const { openWorker, version, bump } = useWorkerDrawer()
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const [w, c, b] = await Promise.all([fetchWorkers(), fetchCrews(), fetchBranches()])
       setData(w)
@@ -403,13 +404,14 @@ export function Equipo() {
       setBranches(b.branches)
       setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error')
+      if (!silent) setError(e instanceof Error ? e.message : 'Error')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [])
 
   useEffect(() => { load() }, [load, version])
+  usePolling(useCallback(() => { load(true) }, [load]))
 
   function openModal() {
     if (branches.length === 0) {
@@ -453,7 +455,7 @@ export function Equipo() {
         <div className="ml-auto flex gap-2 md:gap-3">
           <button onClick={() => setShowBranchModal(true)} className="btn">+ Sucursal</button>
           <button onClick={openModal} className="btn btn-primary">+ Trabajador</button>
-          <button onClick={load} disabled={loading} className="btn" aria-label="Actualizar">
+          <button onClick={() => load()} disabled={loading} className="btn" aria-label="Actualizar">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>

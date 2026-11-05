@@ -248,10 +248,17 @@ def attention_items(s: Snapshot) -> list[dict]:
             asked = s.reminders_today.get(("job_progress", j.id))
             if asked:
                 detail.append(f"el bot le preguntó a las {fmt_hora(asked)}")
-            vence = f"venció {fmt_dia(j.due_date, s.today)}" if j.due_date else "marcada con problema"
+            if j.problem_at:
+                # Reportó un problema: lo importante es qué pasó, no la fecha
+                title = f"{j.title}: {who} reportó un problema"
+                detail[0] = (f"“{j.problem_note}”" if j.problem_note
+                             else f"todavía no dice qué pasó (avisó a las {fmt_hora(j.problem_at)})")
+            else:
+                vence = f"venció {fmt_dia(j.due_date, s.today)}" if j.due_date else "marcada como atrasada"
+                title = f"{j.title}: {vence}"
             items.append({
                 "id": f"atrasada:{j.id}", "severity": "urgent", "kind": "tarea_atrasada",
-                "title": f"{j.title}: {vence}", "detail": " · ".join(detail),
+                "title": title, "detail": " · ".join(detail),
                 "job_id": str(j.id), "worker_id": str(w.id) if w else None,
                 "worker_name": w.name if w else None, "phone_number": w.phone_number if w else None,
                 "action": "whatsapp" if w else "tasks",
@@ -617,6 +624,8 @@ def job_card(s: Snapshot, j: Job) -> dict:
         "overdue": job_is_overdue(j, s.today),
         "completed_at": j.completed_at.isoformat() if j.completed_at else None,
         "acknowledged_at": j.acknowledged_at.isoformat() if j.acknowledged_at else None,
+        "problem_at": j.problem_at.isoformat() if j.problem_at else None,
+        "problem_note": j.problem_note,
         "photo_count": len(photos),
         "duplicate_photos": sum(1 for p in photos if p.duplicate_of_id),
         "last_photo_at": photos[-1].received_at.isoformat() if photos else None,

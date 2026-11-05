@@ -1,9 +1,10 @@
 import { Copy, ExternalLink, MapPin } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { EventLog, EventsResponse } from '../api/client'
 import { fetchEvents } from '../api/client'
 import { PhotoLightbox, type LightboxEntry } from '../components/PhotoLightbox'
 import { compareWith } from '../lib/format'
+import { usePolling } from '../lib/usePolling'
 
 const TYPE_LABEL: Record<string, string> = {
   checkin:  'Check-in',
@@ -81,6 +82,9 @@ function EventRow({ ev, onPhoto }: { ev: EventLog; onPhoto: (entry: LightboxEntr
             {content && (
               <p className="text-sm mt-0.5 truncate text-[#2A2622]">{content}</p>
             )}
+            {ev.job_title && (
+              <p className="text-xs text-[#58423B]">Trabajo: <b className="font-semibold">{ev.job_title}</b></p>
+            )}
             {ev.location_label && (
               <p className="text-sm inline-flex items-center gap-1 text-[#58423B]">
                 <MapPin size={13} aria-hidden="true" className="shrink-0" />
@@ -107,20 +111,22 @@ export function RegistrosDiarios() {
   const [error, setError]               = useState<string | null>(null)
   const [lightbox, setLightbox]         = useState<LightboxEntry | null>(null)
 
-  async function load(d: string) {
-    setLoading(true)
+  const load = useCallback(async (d: string, silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const r = await fetchEvents(d)
       setData(r)
       setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error')
+      if (!silent) setError(e instanceof Error ? e.message : 'Error')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
-  }
+  }, [])
 
-  useEffect(() => { load(selectedDate) }, [selectedDate])
+  useEffect(() => { load(selectedDate) }, [load, selectedDate])
+  // Solo el día de hoy cambia: los días pasados no se vuelven a pedir.
+  usePolling(useCallback(() => { load(selectedDate, true) }, [load, selectedDate]), selectedDate === todayStr)
 
   const byBranch = data
     ? data.events.reduce<Record<string, EventLog[]>>((acc, ev) => {

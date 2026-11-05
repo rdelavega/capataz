@@ -135,7 +135,8 @@ def _button(msg_id: str, payload: str) -> dict:
 
 def _job(status: str = "en_progreso", **kw) -> Job:
     kw.setdefault("worker_id", WORKER.id)
-    return Job(id=uuid.uuid4(), title="Colado de losa", status=status, **kw)
+    kw.setdefault("title", "Colado de losa")
+    return Job(id=uuid.uuid4(), status=status, **kw)
 
 
 def test_terminado_queda_por_revisar_y_pide_foto(sent) -> None:
@@ -390,3 +391,61 @@ def test_foto_repetida_se_marca_sin_decirle_nada_al_trabajador(sent, monkeypatch
     _run(event, attendance=AttendanceDaily(status="presente"))
     assert event.duplicate_of_id == original and event.photo_hash == "f0f0f0f0f0f0f0f0"
     assert "repetid" not in sent.await_args.args[1].lower()
+
+
+# ─── Enterado con botones, "ya terminé" escrito y el motivo de un problema ───
+
+@pytest.fixture
+def buttons(monkeypatch) -> AsyncMock:
+    mock = AsyncMock()
+    monkeypatch.setattr(parser.whatsapp, "send_interactive_buttons", mock)
+    return mock
+
+
+def test_enterado_contesta_con_los_botones_que_menciona(sent, buttons) -> None:
+    job = _job("pendiente")
+    _run(_event(_payload(_button("wamid.1", f"visto::{job.id}")), "wamid.1"), extra=[job])
+    body, btns = buttons.await_args.args[1], buttons.await_args.args[2]
+    assert "Ya terminé" in body and "aquí abajo" in body
+    assert [b["reply"]["id"] for b in btns] == [f"completado::{job.id}", f"atrasado::{job.id}"]
+    assert job.acknowledged_at is not None
+    sent.assert_not_awaited()
+
+
+@pytest.mark.parametrize("texto", ["ya terminé", "Ya termine jefe", "ya terminamos la losa", "ya quedó"])
+def test_ya_termine_escrito_con_un_trabajo_lo_manda_a_revision(sent, texto) -> None:
+    job = _job("en_progreso")
+    event = _event(_payload(_text("wamid.1", texto)), "wamid.1")
+    # orden de consultas: worker, asistencia, trabajos abiertos, (botón) el trabajo
+    _run(event, attendance=AttendanceDaily(status="presente"), after=[[job], job])
+    assert job.status == "por_revisar" and event.job_id == job.id
+    assert "foto" in sent.await_args.args[1]
+
+
+def test_ya_termine_con_varios_trabajos_pregunta_cual(sent, buttons) -> None:
+    a, b = _job("en_progreso"), _job("pendiente", title="Muros de baño")
+    _run(_event(_payload(_text("wamid.1", "ya terminamos")), "wamid.1"),
+         attendance=AttendanceDaily(status="presente"), after=[[a, b]])
+    assert "¿Cuál terminaron?" in buttons.await_args.args[1]
+    assert {x["reply"]["id"] for x in buttons.await_args.args[2]} == {f"completado::{a.id}", f"completado::{b.id}"}
+    assert a.status == "en_progreso" and b.status == "pendiente"  # nada cambia hasta que elija
+
+
+@pytest.mark.parametrize("texto", ["todavía no terminamos", "no he terminado", "ya quedó, falta limpiar", "listo jefe"])
+def test_no_es_terminado(texto) -> None:
+    assert not parser._is_done(texto)
+
+
+def test_tengo_un_problema_pregunta_que_paso(sent) -> None:
+    job = _job("en_progreso")
+    _run(_event(_payload(_button("wamid.1", f"atrasado::{job.id}")), "wamid.1"), extra=[job])
+    assert job.status == "atrasado" and job.problem_at is not None and job.problem_note is None
+    assert "¿Qué pasó" in sent.await_args.args[1]
+
+
+def test_lo_siguiente_que_dice_es_el_motivo_del_problema(sent) -> None:
+    job = _job("atrasado", problem_at=datetime.now(tz=timezone.utc) - timedelta(minutes=10))
+    event = _event(_payload(_text("wamid.1", "no llegó el cemento")), "wamid.1")
+    _run(event, attendance=AttendanceDaily(status="presente"), after=[job])
+    assert job.problem_note == "no llegó el cemento" and event.job_id == job.id
+    assert "Ya le pasé a tu jefe" in sent.await_args.args[1]

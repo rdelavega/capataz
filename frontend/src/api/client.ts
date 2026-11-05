@@ -147,6 +147,8 @@ export interface EventLog {
   /** 'En Obra Norte' / 'A 2.3 km de Obra Norte'. Las coordenadas no salen del servidor. */
   location_label: string | null
   duplicate_of: DuplicateOf | null
+  /** El trabajo del que habla el mensaje (botones, fotos, "ya terminé", un problema). */
+  job_title: string | null
 }
 
 export interface EventsResponse {
@@ -226,6 +228,9 @@ export interface JobCardData {
   completed_at: string | null
   /** Cuándo el encargado apretó "Enterado" en el aviso de WhatsApp. */
   acknowledged_at: string | null
+  /** "Tengo un problema": cuándo lo reportó y qué contestó cuando el bot preguntó qué pasó. */
+  problem_at: string | null
+  problem_note: string | null
   photo_count: number
   duplicate_photos: number
   last_photo_at: string | null

@@ -129,7 +129,9 @@ En **Tareas** (laptop):
 - [ ] **+ Nuevo trabajo** para *Cuadrilla Cholul* ("Prueba de recorrido",
       vence hoy). A tu WhatsApp llega *📋 Nuevo trabajo para Cuadrilla Cholul…*
       con botones **Enterado / Ya terminé / Tengo un problema**.
-- [ ] Aprieta **Enterado**: el bot confirma y el trabajo muestra que lo viste.
+- [ ] Aprieta **Enterado**: el bot confirma **con los botones Ya terminé / Tengo
+      un problema** y el trabajo muestra que lo viste. En Registros, el
+      "Enterado" dice de qué trabajo es.
 - [ ] Manda una foto: ahora tu cuadrilla tiene **2 trabajos abiertos**, así
       que el bot pregunta **¿De cuál trabajo es?** con botones. Elige uno:
       *👍 Listo, la foto quedó en …*.
@@ -138,8 +140,14 @@ En **Tareas** (laptop):
       pasa a **Por revisar** con la foto, y sale en *Necesita tu atención*.
 - [ ] **Aprobar**: te llega *✅ Tu jefe aprobó …*. El trabajo pasa a
       *Terminadas*.
-- [ ] En "Prueba de recorrido" aprieta **Tengo un problema** (en el WhatsApp):
-      el trabajo pasa a **Atrasadas** y sale como pendiente urgente.
+- [ ] **Escribe** "ya terminé" (sin botón). Con 2 trabajos abiertos el bot
+      pregunta **¿Cuál terminaron?** con botones; con uno solo lo manda directo a
+      revisión y pide foto. "Todavía no terminamos" **no** cuenta.
+- [ ] En "Prueba de recorrido" aprieta **Tengo un problema**: el bot pregunta
+      **¿Qué pasó?**. Contesta con texto o audio ("no llegó el cemento"). El
+      trabajo pasa a **Atrasadas** con *Problema: "no llegó el cemento"* en la
+      tarjeta, y en Hoy: *Prueba de recorrido: Cuadrilla Cholul reportó un
+      problema*.
 - [ ] **Regresar** un trabajo por revisar con una nota: te llega la nota por
       WhatsApp.
 

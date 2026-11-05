@@ -219,6 +219,8 @@ def _set_status(job: Job, status: str) -> None:
         job.completed_at = job.completed_at or now
     elif status in ("pendiente", "en_progreso", "atrasado"):
         job.completed_at = None
+    if status != "atrasado":
+        job.problem_at = job.problem_note = None  # el problema quedó atrás
     job.status = status
 
 

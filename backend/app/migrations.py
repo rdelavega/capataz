@@ -66,6 +66,9 @@ STATEMENTS: list[str] = [
     "ALTER TABLE events ADD COLUMN IF NOT EXISTS duplicate_of_id UUID REFERENCES events(id) ON DELETE SET NULL",
     "CREATE INDEX IF NOT EXISTS idx_events_photo_hash ON events (company_id, received_at) WHERE photo_hash IS NOT NULL",
     "ALTER TABLE workers ADD COLUMN IF NOT EXISTS location_notice_at TIMESTAMPTZ",
+    # "Tengo un problema" con el motivo
+    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS problem_at TIMESTAMPTZ",
+    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS problem_note TEXT",
 ]
 
 

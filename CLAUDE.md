@@ -123,6 +123,13 @@ WhatsApp (trabajador)
   WhatsApp usan las mismas para contar lo mismo.
 - **Tarea terminada = foto + visto bueno**: "Ya terminé" deja la tarea en
   `por_revisar`, el bot pide foto, y solo el dueño la pasa a `completado`.
+  "Ya terminé" **escrito o en audio** cuenta igual que el botón (`_is_done`:
+  terminé/terminamos/acabé/ya quedó; no con "no/todavía/aún/falta"; "listo" no
+  cuenta porque casi siempre es "ok"). Con varios trabajos abiertos pregunta
+  cuál. Si el bot menciona un botón, el mensaje lo trae.
+- **"Tengo un problema" pregunta qué pasó**: `jobs.problem_at`; el siguiente
+  texto o audio (2 h) es `jobs.problem_note` y el panel lo muestra. Al cambiar
+  de estado se limpia.
 - **Los trabajos son de la cuadrilla, no de una persona** (decisión 2026-11-02):
   el dueño manda "Fumigar casa García" a una cuadrilla (`crews`), no reparte
   tareas individuales. Obra/sucursal (`branches`) = lugar; cuadrilla = equipo

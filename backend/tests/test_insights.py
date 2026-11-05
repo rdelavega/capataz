@@ -298,3 +298,19 @@ def test_foto_repetida_es_pendiente_con_la_original() -> None:
 def test_borrado_de_ubicaciones_corre_tambien_en_domingo() -> None:
     domingo = datetime(2026, 11, 1, 3, 31, tzinfo=TZ)
     assert [k for k, _ in scheduler.due_jobs(domingo)] == ["location_purge"]
+
+
+def test_tarea_con_problema_dice_que_paso() -> None:
+    luis = _worker("Luis Pech")
+    j = _job("Colado de losa", luis, "atrasado", TODAY, problem_at=NOW - timedelta(hours=1),
+             problem_note="no llegó el cemento")
+    item = next(i for i in insights.attention_items(_snap([luis], jobs=[j])) if i["kind"] == "tarea_atrasada")
+    assert item["title"] == "Colado de losa: Luis Pech reportó un problema"
+    assert item["detail"].startswith("“no llegó el cemento”") and "Luis Pech" not in item["detail"]
+
+
+def test_tarea_con_problema_sin_motivo_todavia() -> None:
+    luis = _worker("Luis Pech")
+    j = _job("Colado de losa", luis, "atrasado", None, problem_at=NOW - timedelta(minutes=5))
+    item = next(i for i in insights.attention_items(_snap([luis], jobs=[j])) if i["kind"] == "tarea_atrasada")
+    assert item["detail"].startswith("todavía no dice qué pasó")

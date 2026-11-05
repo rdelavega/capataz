@@ -30,6 +30,9 @@ class Job(Base):
     review_note: Mapped[str | None] = mapped_column(Text)
     # Cuándo el encargado (o la persona) apretó "Enterado" en el aviso de asignación.
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # "Tengo un problema": cuándo lo reportó y qué dijo (el bot le pregunta qué pasó).
+    problem_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    problem_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
