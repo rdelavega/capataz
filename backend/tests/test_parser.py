@@ -342,11 +342,41 @@ def test_en_obra_no_se_sobreescribe_con_una_lejana(sent, monkeypatch) -> None:
     assert att.location_status == "en_sitio" and att.location_distance_m == 30
 
 
-def test_lejana_se_corrige_cuando_llega_a_la_obra(sent, monkeypatch) -> None:
+def test_lejana_no_se_corrige_al_llegar_despues(sent, monkeypatch) -> None:
+    """Checó desde su casa y ya en la obra manda otra: no se borra el retardo."""
     _patch_check(monkeypatch, "en_sitio", distance=25)
     att = AttendanceDaily(status="presente", location_status="lejos", location_distance_m=4000)
     _run(_event(_payload(_location("wamid.1")), "wamid.1"), attendance=att)
+    assert att.location_status == "lejos" and att.location_distance_m == 4000
+    assert sent.await_args.args[1] == "📍 Ubicación recibida, Luis. Gracias."
+
+
+def test_con_ubicacion_ya_registrada_no_vuelve_a_pedirla(sent, location_requests) -> None:
+    att = AttendanceDaily(status="presente", location_status="lejos", checkin_at=datetime.now(tz=timezone.utc))
+    _run(_event(_payload(_text("wamid.1", "presente")), "wamid.1"), attendance=att)
+    location_requests.assert_not_awaited()
+    assert "Ya tenías registro" in sent.await_args.args[1]
+
+
+def test_ubicacion_fuera_de_la_ventana_no_cuenta(sent, monkeypatch) -> None:
+    """Presente sin ubicación desde la casa y la ubicación hasta llegar: queda sin ubicación."""
+    _patch_check(monkeypatch, "en_sitio")
+    att = AttendanceDaily(status="presente", checkin_at=datetime.now(tz=timezone.utc) - timedelta(minutes=50))
+    _run(_event(_payload(_location("wamid.1")), "wamid.1"), attendance=att)
+    assert att.location_status is None
+
+
+def test_ubicacion_dentro_de_la_ventana_cuenta(sent, monkeypatch) -> None:
+    _patch_check(monkeypatch, "en_sitio")
+    att = AttendanceDaily(status="presente", checkin_at=datetime.now(tz=timezone.utc) - timedelta(minutes=3))
+    _run(_event(_payload(_location("wamid.1")), "wamid.1"), attendance=att)
     assert att.location_status == "en_sitio"
+
+
+def test_presente_tarde_sin_ubicacion_ya_no_ofrece_el_boton(sent, location_requests) -> None:
+    att = AttendanceDaily(status="presente", checkin_at=datetime.now(tz=timezone.utc) - timedelta(hours=2))
+    _run(_event(_payload(_text("wamid.1", "presente")), "wamid.1"), attendance=att)
+    location_requests.assert_not_awaited()
 
 
 def test_foto_repetida_se_marca_sin_decirle_nada_al_trabajador(sent, monkeypatch) -> None:

@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     checkin_ask_location: bool = True
     geofence_meters: int = 300
     location_retention_days: int = 90
+    # Minutos después del presente en que se acepta la ubicación (una por día).
+    location_window_minutes: int = 15
     location_purge_time: str = "03:30"
     # Fotos casi idénticas a una anterior se marcan como repetidas.
     duplicate_photo_days: int = 60

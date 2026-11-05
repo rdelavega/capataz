@@ -124,6 +124,18 @@ async def _check_location(session, company_id: uuid.UUID, worker: Worker,
     return geo.check_location(lat, lng, branches, expected)
 
 
+def _location_open(attendance: AttendanceDaily, now: datetime) -> bool:
+    """
+    ¿Todavía se acepta la ubicación de hoy? Solo una por día, y poco después del
+    presente. Si no, quien checa desde su casa podría mandar la ubicación ya en
+    la obra y quedar "en obra" con la hora de antes (se borraría el retardo).
+    """
+    if attendance.location_status is not None:
+        return False
+    since = attendance.checkin_at or now
+    return now - since <= timedelta(minutes=settings.location_window_minutes)
+
+
 def _apply_location(attendance: AttendanceDaily, check: geo.LocationCheck, now: datetime) -> None:
     attendance.location_status = check.status
     attendance.location_distance_m = check.distance_m
@@ -421,9 +433,9 @@ async def _process(event_id: uuid.UUID, session) -> None:
             attendance.checkin_at = attendance.checkin_at or now
 
         if event_type == "location":
-            check = await _check_location(session, company_id, worker, latitude, longitude)
-            # Una ubicación "en obra" no se sobreescribe; una lejana sí (fue por material y llegó).
-            if attendance.location_status != "en_sitio":
+            # La primera ubicación del día es la que cuenta; las demás solo quedan en el registro.
+            if _location_open(attendance, now):
+                check = await _check_location(session, company_id, worker, latitude, longitude)
                 _apply_location(attendance, check, now)
                 reply = _location_reply(check)
             else:
@@ -435,7 +447,7 @@ async def _process(event_id: uuid.UUID, session) -> None:
                 f"✅ ¡Presente! {greeting()}, {nombre}. Tu registro quedó guardado."
                 if is_new else f"👍 Ya tenías registro de hoy, {nombre}. ¡Que te vaya bien!"
             )
-            if settings.checkin_ask_location and attendance.location_status != "en_sitio":
+            if settings.checkin_ask_location and _location_open(attendance, now):
                 location_prompt = f"{reply}\n\n{LOCATION_ASK}"
                 if worker.location_notice_at is None:
                     location_prompt += f"\n\n{LOCATION_NOTICE}"

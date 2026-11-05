@@ -65,7 +65,8 @@ Abre **Hoy** en la laptop.
 - [ ] **Escribirle** en Ángel abre WhatsApp con el mensaje ya escrito. En la
       laptop abre WhatsApp Web; en el celular, la app.
 - [ ] **Ver ficha** de Manuel Chan: junto a *Llegó 7:18 am* aparece
-      **⚠ A 2.4 km de Obra Altabrisa**. **No** aparece ningún mapa ni coordenadas.
+      **A 2.4 km de Obra Altabrisa**. Nunca hay mapa ni coordenadas, en ninguna
+      ficha: el panel solo dice "En obra", "A X km" o "Sin ubicación".
 - [ ] Ficha de Raúl Dzib: aparece **Sin ubicación**. Su foto de hoy tiene la
       etiqueta **Repetida**; al abrirla salen **las dos fotos lado a lado** con el
       texto "Tú decides".
@@ -82,22 +83,28 @@ Todo desde tu celular, al número del bot. Ten el panel abierto en la laptop
 - [ ] En el panel: desaparece *Ángel Couoh no ha llegado*; en tu ficha sale
       *Llegó* (o *Tarde*, si ya pasaron las 8:10) con **Sin ubicación**.
 
-**Prueba de que no se puede engañar fácil** (esto responde la duda del dueño,
-anota qué pasa):
+**La primera ubicación del día es la que cuenta**, y solo si llega en los 15
+minutos después del presente (`LOCATION_WINDOW_MINUTES`). Así nadie checa desde
+su casa y "se corrige" ya en la obra. Por eso cada caso se prueba en un día
+limpio: entre una prueba y otra vuelve a correr `seed_demo.py`.
 
-- [ ] Toca **Enviar ubicación** y, en lugar de "ubicación actual", **busca o
-      elige un lugar a 2 km o más**. ¿Te dejó? Anota si sí o no. Si te dejó:
-      el bot debe contestar *📍 Recibida. Te marca a X km de Obra Cholul…* y en
-      el panel salir **⚠ A X km** y el pendiente *Ángel Couoh checó a X km*.
-      Avísame para revisar si el mensaje traía nombre o dirección del lugar
-      (así se distinguiría un lugar elegido a mano).
-- [ ] Manda ahora tu **ubicación actual**. Respuesta: *📍 Listo, quedaste
-      registrado en Obra Cholul — Casa Muestra*. En el panel: **📍 En Obra
-      Cholul** y desaparece el pendiente de "lejos".
-- [ ] Manda **presente** otra vez: *👍 Ya tenías registro de hoy…*, **sin**
-      botón de ubicación.
-- [ ] **Registros diarios**: tus mensajes aparecen con *📍 En Obra Cholul* o
-      *📍 A X km…*, nunca con coordenadas.
+- [ ] **En obra** (el caso de la demo): toca **Enviar ubicación** → *Ubicación
+      actual*. Respuesta: *Listo, quedaste registrado en Obra Cholul — Casa
+      Muestra*. En el panel: **En Obra Cholul**.
+- [ ] **Lejos** (otro día limpio): en lugar de tu ubicación actual, **elige un
+      punto a 2 km o más**. Respuesta: *Recibida. Te marca a X km de Obra
+      Cholul…*; en el panel **A X km** y el pendiente *Ángel Couoh checó a X km*.
+      Probado 2026-11-04: WhatsApp **sí deja** elegir otro punto y Meta solo
+      manda latitud y longitud, igual que una ubicación real (ver CLAUDE.md).
+- [ ] Después de cualquiera de las dos, manda **otra ubicación**: contesta
+      *Ubicación recibida* y el resultado del día **no cambia**.
+- [ ] Manda **presente** otra vez: *Ya tenías registro de hoy…*, **sin** botón
+      de ubicación.
+- [ ] **Sin ubicación**: manda presente, **no** toques el botón y espera más de
+      15 minutos. Ya no se ofrece el botón y una ubicación tardía no cuenta: tu
+      ficha sigue en **Sin ubicación**.
+- [ ] **Registros diarios**: las ubicaciones aparecen como *En Obra Cholul* o
+      *A X km…*, nunca con coordenadas.
 
 ## 3. Reportar trabajo
 

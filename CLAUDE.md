@@ -144,11 +144,19 @@ WhatsApp (trabajador)
   como llegada. `app/geo.py` la compara con las obras (`branches.latitude/
   longitude`, radio `GEOFENCE_METERS` o `branches.geofence_m`): en cualquier
   obra = `en_sitio`; si no, `lejos` + distancia a su obra (la de su cuadrilla).
+  **Una sola ubicación por día** y solo dentro de `LOCATION_WINDOW_MINUTES`
+  (15) del presente: si no, quien checa desde su casa la mandaría ya en la obra
+  y borraría su retardo. Las siguientes quedan en `events`, sin cambiar nada.
   Reglas éticas, no negociables: **las coordenadas nunca salen del servidor**
   (el panel ve "En Obra X" o "A 2.3 km", nunca un mapa de dónde estaba); se
   borran a los `LOCATION_RETENTION_DAYS` (scheduler `location_purge`); solo
   se pide al checar, no hay rastreo durante el día; la primera vez el bot le
   explica al trabajador para qué es; las marcas son avisos, no castigos.
+  Lo que la ubicación no puede detectar (probado 2026-11-04): el trabajador
+  puede elegir otro punto en el mapa al compartir, y Meta solo manda latitud y
+  longitud, igual que una ubicación real. Detiene al que manda "presente"
+  desde su casa sin pensarlo, no al que hace trampa a propósito; para eso
+  están las capas siguientes (encargado confirma, ubicación a hora aleatoria).
 - **Fotos repetidas**: dHash de 64 bits (`app/services/photos.py`), umbral
   estricto (≤2 bits) y fotos lisas excluidas. Al trabajador no se le dice
   nada; el dueño ve las dos fotos lado a lado ("puede ser el mismo ángulo,
