@@ -1,6 +1,7 @@
 import { MapPin, MapPinCheck, MapPinOff } from 'lucide-react'
 import type { AttendanceStatus, CheckinLocation } from '../api/client'
 import { fmtDistance, fmtHora } from '../lib/format'
+import { useSite } from '../lib/site'
 
 /** Estado de hoy en un solo chip, con hora. Es el único lugar donde se muestra. */
 export function TodayStatus({ status, checkinAt }: { status: AttendanceStatus | null; checkinAt: string | null }) {
@@ -10,12 +11,21 @@ export function TodayStatus({ status, checkinAt }: { status: AttendanceStatus | 
   return <span className="chip chip-gray">Sin reporte</span>
 }
 
-const LOCATION_CHIP: Record<CheckinLocation['status'], { cls: string; title: string }> = {
-  en_sitio:       { cls: 'text-[#4F7D1A] font-semibold', title: 'Checó desde la obra' },
+const LOCATION_CLS: Record<CheckinLocation['status'], string> = {
+  en_sitio:       'text-[#4F7D1A] font-semibold',
   // Lo único que el dueño tiene que notar: con fondo.
-  lejos:          { cls: 'border-2 border-[#2A2622] bg-[#BA7517] px-1.5 font-semibold text-white', title: 'Checó lejos de la obra. Puede que lo hayan mandado a otro lado. Solo se guarda la distancia, no dónde estaba.' },
-  sin_referencia: { cls: 'text-[#8C7169]', title: 'Mandó su ubicación, pero la obra no tiene ubicación para comparar. Fíjala en Equipo.' },
-  sin_ubicacion:  { cls: 'text-[#8C7169]', title: 'Checó sin mandar su ubicación' },
+  lejos:          'border-2 border-[#2A2622] bg-[#BA7517] px-1.5 font-semibold text-white',
+  sin_referencia: 'text-[#8C7169]',
+  sin_ubicacion:  'text-[#8C7169]',
+}
+
+function locationTitle(status: CheckinLocation['status'], one: string): string {
+  return {
+    en_sitio: `Checó desde la ${one}`,
+    lejos: `Checó lejos de la ${one}. Puede que lo hayan mandado a otro lado. Solo se guarda la distancia, no dónde estaba.`,
+    sin_referencia: `Mandó su ubicación, pero la ${one} no tiene ubicación para comparar. Fíjala en Equipo.`,
+    sin_ubicacion: 'Checó sin mandar su ubicación',
+  }[status]
 }
 
 /**
@@ -24,12 +34,14 @@ const LOCATION_CHIP: Record<CheckinLocation['status'], { cls: string; title: str
  * no se repite su nombre: "En obra" / "A 2.4 km".
  */
 export function LocationChip({ location, ownBranch }: { location: CheckinLocation | null; ownBranch?: string | null }) {
+  const site = useSite()
   if (!location) return null
-  const { cls, title } = LOCATION_CHIP[location.status]
+  const cls = LOCATION_CLS[location.status]
+  const title = locationTitle(location.status, site.one)
   const Icon = location.status === 'en_sitio' ? MapPinCheck : location.status === 'lejos' ? MapPin : MapPinOff
   let label = location.label
   if (ownBranch !== undefined && location.branch_name === ownBranch) {
-    if (location.status === 'en_sitio') label = 'En obra'
+    if (location.status === 'en_sitio') label = `En ${site.one}`
     if (location.status === 'lejos' && location.distance_m !== null) label = `A ${fmtDistance(location.distance_m)}`
   }
   return (

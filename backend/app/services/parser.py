@@ -58,10 +58,10 @@ _NOT_DONE = re.compile(r"\b(no|todav[ií]a|a[uú]n|falta|faltan)\b", re.I)
 # Después de "Tengo un problema", su siguiente texto o audio es el motivo.
 PROBLEM_NOTE_WINDOW = timedelta(hours=2)
 
-LOCATION_ASK = "Toca *Enviar ubicación* para confirmar que estás en la obra."
+LOCATION_ASK = "Toca *Enviar ubicación* para confirmar que ya llegaste."
 # Se dice una sola vez por trabajador: para qué se usa su ubicación y para qué no.
 LOCATION_NOTICE = (
-    "_Tu ubicación solo se usa para confirmar tu llegada a la obra. "
+    "_Tu ubicación solo se usa para confirmar tu llegada. "
     "No te seguimos durante el día._"
 )
 

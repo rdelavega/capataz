@@ -17,6 +17,8 @@ class Worker(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     phone_number: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Foto de perfil que sube el dueño desde la ficha (en R2). WhatsApp no deja leer la del trabajador.
+    photo_url: Mapped[str | None] = mapped_column(String)
     crew_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("crews.id", ondelete="SET NULL"))
     # Cuándo se le explicó para qué se usa su ubicación (se le dice una sola vez).
     location_notice_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

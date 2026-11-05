@@ -2,6 +2,7 @@ import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { BranchOption, CrewData, WorkerDetail } from '../api/client'
 import { createJob, fetchBranches, fetchCrews, fetchWorkers } from '../api/client'
+import { useSite } from '../lib/site'
 
 type Target = 'crew' | 'person'
 
@@ -16,6 +17,7 @@ export function NewJobModal({ defaultWorkerId, defaultCrewId, onClose, onCreated
   /** notice: resultado del aviso por WhatsApp, para mostrarlo en la pantalla de origen. */
   onCreated: (notice?: string) => void
 }) {
+  const site = useSite()
   const [workers, setWorkers]   = useState<WorkerDetail[]>([])
   const [crews, setCrews]       = useState<CrewData[]>([])
   const [branches, setBranches] = useState<BranchOption[]>([])
@@ -117,7 +119,7 @@ export function NewJobModal({ defaultWorkerId, defaultCrewId, onClose, onCreated
             </div>
             {target === 'crew' && loaded && crews.length === 0 ? (
               <p className="mono mt-2 border-2 border-dashed border-[#8C7169] bg-[#F2EDE4] px-3 py-2 text-xs text-[#58423B]">
-                Todavía no tienes cuadrillas. Ármalas en <b>Equipo → Cuadrillas</b> (nombre, obra y encargado),
+                Todavía no tienes cuadrillas. Ármalas en <b>Equipo → Cuadrillas</b> (nombre, {site.one} y encargado),
                 o asígnale este trabajo a una persona.
               </p>
             ) : target === 'crew' ? (

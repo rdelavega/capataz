@@ -11,7 +11,7 @@ from app.config import settings
 from app.db import engine
 from app.dependencies import get_current_user
 from app.migrations import run_migrations
-from app.routers import auth, dashboard, jobs, webhook, workers
+from app.routers import auth, company, dashboard, jobs, webhook, workers
 from app.services import scheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -55,6 +55,7 @@ app.include_router(auth.router)
 app.include_router(dashboard.router, dependencies=[Depends(get_current_user)])
 app.include_router(workers.router,   dependencies=[Depends(get_current_user)])
 app.include_router(jobs.router,      dependencies=[Depends(get_current_user)])
+app.include_router(company.router,   dependencies=[Depends(get_current_user)])
 
 
 @app.get("/health")

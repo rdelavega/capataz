@@ -151,7 +151,24 @@ En **Tareas** (laptop):
 - [ ] **Regresar** un trabajo por revisar con una nota: te llega la nota por
       WhatsApp.
 
+- [ ] **Toca una tarjeta** (o su título) en Tareas: abre el detalle con
+      fotos, historia (lo creaste, el bot le avisó, Enterado, fotos, Dijo que
+      terminó, problema…) y las acciones. Los botones de la tarjeta siguen
+      funcionando sin abrir el detalle.
+- [ ] **Registros → Por persona**: una tarjeta por trabajador con su llegada,
+      fotos, lo que reportó y sus trabajos. Sin "Enterado" ni botones sueltos.
+      *Todos los mensajes* muestra la lista completa.
+- [ ] Sin recargar: manda algo por WhatsApp y en ~10 s aparece en la pantalla
+      donde estés (Hoy, Tareas, Equipo, Registros o la ficha).
+
 ## 5. Equipo y altas
+
+- [ ] **Les llamas**: cambia a *Sucursales* y revisa que el panel diga
+      sucursal en todos lados (Equipo, Hoy, Tareas, la ficha). Regrésalo a
+      *Obras*.
+- [ ] **Foto de perfil**: en la ficha toca el círculo de iniciales y elige o
+      toma una foto. Aparece en la ficha, en Equipo y en Registros. *Quitar* la
+      regresa a las iniciales.
 
 - [ ] **+ Trabajador** con el teléfono escrito como "999 123 4567": queda
       guardado como +521… En la lista aparece en su obra.

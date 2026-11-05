@@ -69,6 +69,9 @@ STATEMENTS: list[str] = [
     # "Tengo un problema" con el motivo
     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS problem_at TIMESTAMPTZ",
     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS problem_note TEXT",
+    # Nombre del lugar de trabajo según el giro
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS site_label TEXT NOT NULL DEFAULT 'obra'",
+    "ALTER TABLE workers ADD COLUMN IF NOT EXISTS photo_url TEXT",
 ]
 
 

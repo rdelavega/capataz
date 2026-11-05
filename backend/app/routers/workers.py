@@ -1,6 +1,8 @@
+import io
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from PIL import Image, ImageOps
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -14,7 +16,7 @@ from app.models.crew import Crew
 from app.models.event import Event
 from app.models.worker import Worker
 from app.phone import normalize_phone
-from app.services import insights, notify
+from app.services import insights, notify, storage
 from app.services import photos as photo_svc
 from app.timeutil import local_date
 
@@ -71,7 +73,7 @@ async def _set_location(branch: Branch, text: str | None) -> None:
     if found is None:
         raise HTTPException(
             status_code=422,
-            detail="No encontré la ubicación en ese link. Abre la obra en Google Maps, "
+            detail="No encontré la ubicación en ese link. Abre el lugar en Google Maps, "
                    "toca Compartir y pega el link, o escribe las coordenadas (21.0190, -89.6237).",
         )
     branch.latitude, branch.longitude = found
@@ -114,7 +116,7 @@ async def update_branch(
         select(Branch).where(Branch.id == branch_id, Branch.company_id == uuid.UUID(settings.company_id))
     )).scalar_one_or_none()
     if not branch:
-        raise HTTPException(status_code=404, detail="Sucursal no encontrada")
+        raise HTTPException(status_code=404, detail="No encontré ese lugar de trabajo")
     updates = body.model_dump(exclude_unset=True)
     if "name" in updates and (body.name or "").strip():
         branch.name = body.name.strip()
@@ -266,6 +268,53 @@ async def worker_summary(
 
     originals = await photo_svc.load_originals(session, [*events_today, *photos])
     return insights.worker_summary(s, worker, events_today, photos, photo_total, originals)
+
+
+PROFILE_PHOTO_PX = 512
+PROFILE_PHOTO_MAX_BYTES = 15 * 1024 * 1024
+
+
+def _profile_jpeg(data: bytes) -> bytes:
+    """Recorta al centro en cuadrado, 512 px, JPEG: una foto de 5 MB queda en ~50 KB."""
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            im = ImageOps.exif_transpose(im).convert("RGB")
+            im = ImageOps.fit(im, (PROFILE_PHOTO_PX, PROFILE_PHOTO_PX), Image.Resampling.LANCZOS)
+            out = io.BytesIO()
+            im.save(out, "JPEG", quality=85)
+            return out.getvalue()
+    except Exception as e:
+        raise HTTPException(status_code=422, detail="Ese archivo no es una foto que pueda leer (usa JPG o PNG)") from e
+
+
+@router.post("/{worker_id}/photo", status_code=200)
+async def upload_worker_photo(
+    worker_id: uuid.UUID,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Foto de perfil del trabajador. La sube el dueño desde la ficha."""
+    worker = await _check_worker(session, worker_id)
+    data = await file.read(PROFILE_PHOTO_MAX_BYTES + 1)
+    if len(data) > PROFILE_PHOTO_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="La foto pesa más de 15 MB")
+    jpeg = _profile_jpeg(data)
+    # Nombre nuevo en cada cambio, para que el navegador no muestre la anterior
+    key = f"media/{worker.company_id}/workers/{worker.id}-{uuid.uuid4().hex[:8]}.jpg"
+    try:
+        worker.photo_url = storage.upload_to_r2(jpeg, key, "image/jpeg")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="No se pudo guardar la foto. Intenta de nuevo.") from e
+    await session.commit()
+    return {"photo_url": worker.photo_url}
+
+
+@router.delete("/{worker_id}/photo", status_code=200)
+async def delete_worker_photo(worker_id: uuid.UUID, session: AsyncSession = Depends(get_db)) -> dict:
+    worker = await _check_worker(session, worker_id)
+    worker.photo_url = None
+    await session.commit()
+    return {"ok": True}
 
 
 @router.patch("/{worker_id}", status_code=200)

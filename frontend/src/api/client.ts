@@ -5,7 +5,8 @@ const USER_KEY  = 'capataz_user'
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem(TOKEN_KEY)
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  // Con FormData (subir fotos) el navegador pone el Content-Type con su boundary
+  const headers: Record<string, string> = init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }
   if (token) headers['Authorization'] = `Bearer ${token}`
 
   const res = await fetch(`${API_URL}${path}`, { headers, ...init })
@@ -186,6 +187,8 @@ export interface WorkerDetail {
   name: string
   phone_number: string
   title: string | null
+  /** Foto de perfil que subió el dueño; sin foto se muestran las iniciales. */
+  photo_url: string | null
   branch_id: string | null
   branch_name: string | null
   active: boolean
@@ -419,3 +422,85 @@ export const rejectJob = (id: string, note: string) =>
 /** El bot le pregunta al trabajador cómo va la tarea, con botones. */
 export const remindJob = (id: string) =>
   apiFetch<{ ok: boolean }>(`/jobs/${id}/remind`, { method: 'POST' })
+
+// ─── Bitácora del día (Registros) ────────────────────────────────────────────
+
+export type ActivityKind = 'photo' | 'enterado' | 'termino' | 'en_progreso' | 'problema' | 'problema_detalle'
+
+export interface DayWorker {
+  id: string
+  name: string
+  title: string | null
+  active: boolean
+  photo_url: string | null
+  attendance: { status: AttendanceStatus; checkin_at: string | null; location: CheckinLocation | null } | null
+  photos: PhotoData[]
+  reports: { id: string; type: 'text' | 'audio'; received_at: string; text: string; media_url: string | null }[]
+  jobs: {
+    job_id: string
+    title: string
+    status: JobStatus
+    activity: { kind: ActivityKind; at: string; label: string; text: string | null }[]
+  }[]
+  /** Todos los mensajes que mandó ese día, incluidos botones y acuses. */
+  messages: number
+}
+
+export interface DayResponse {
+  date: string
+  messages: number
+  branches: { id: string | null; name: string; workers: DayWorker[] }[]
+}
+
+export const fetchDay = (date?: string) =>
+  apiFetch<DayResponse>(`/dashboard/day${date ? `?date=${date}` : ''}`)
+
+// ─── Detalle de un trabajo ───────────────────────────────────────────────────
+
+export interface JobHistoryItem {
+  at: string
+  kind: string
+  label: string
+  who: string | null
+  text?: string | null
+  photo?: PhotoData | null
+}
+
+export interface JobDetail extends JobCardData {
+  description: string | null
+  branch_name: string | null
+  created_at: string
+  approved_at: string | null
+  review_note: string | null
+  photos: PhotoData[]
+  history: JobHistoryItem[]
+}
+
+export const fetchJobDetail = (id: string) => apiFetch<JobDetail>(`/jobs/${id}`)
+
+// ─── Empresa ─────────────────────────────────────────────────────────────────
+
+export type SiteLabel = 'obra' | 'sucursal' | 'ruta' | 'zona'
+
+export interface CompanyData {
+  name: string
+  site_label: SiteLabel
+  site_label_plural: string
+  site_options: SiteLabel[]
+}
+
+export const fetchCompany = () => apiFetch<CompanyData>('/company')
+
+export const updateCompany = (site_label: SiteLabel) =>
+  apiFetch<CompanyData>('/company', { method: 'PATCH', body: JSON.stringify({ site_label }) })
+
+// ─── Foto de perfil ──────────────────────────────────────────────────────────
+
+export function uploadWorkerPhoto(id: string, file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  return apiFetch<{ photo_url: string }>(`/workers/${id}/photo`, { method: 'POST', body })
+}
+
+export const deleteWorkerPhoto = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/workers/${id}/photo`, { method: 'DELETE' })

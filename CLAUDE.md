@@ -171,6 +171,22 @@ WhatsApp (trabajador)
 - **Cada evento guarda solo su mensaje** en `raw_payload`
   (`single_message_payload`), para que borrar un dato no deje copias en
   otros eventos del mismo lote.
+- **El lugar de trabajo se llama según el giro** (decisión 2026-11-04):
+  `companies.site_label` = obra · sucursal · ruta · zona (`app/sites.py`). En
+  el frontend, nunca escribir "obra" o "sucursal" fijo: `useSite()` da
+  `one/many/One/Many` (todas femeninas: "la", "nueva", "sin" sirven igual).
+  Se cambia en Equipo ("Les llamas…"); `seed_demo` la pone según el giro. Los
+  mensajes del bot son neutros ("confirmar que ya llegaste").
+- **Foto de perfil**: la sube el dueño desde la ficha (`EditableAvatar`),
+  `POST /workers/{id}/photo`; se recorta cuadrada a 512 px en el servidor.
+  WhatsApp no deja leer la foto del trabajador. `Avatar` muestra foto o iniciales.
+- **Todas las pantallas se refrescan solas** cada 10 s con `usePolling`, en
+  silencio (sin spinner ni skeleton); el spinner es solo para el botón.
+- **Registros = bitácora por persona** (`GET /dashboard/day`): llegada, fotos,
+  reportes y actividad por trabajo. `app/services/activity.py` decide qué es
+  cada mensaje (Enterado, Dijo que terminó, Explicó el problema, reporte…);
+  lo usa también la historia del trabajo (`GET /jobs/{id}`, `JobDrawer`). La
+  lista cruda queda en "Todos los mensajes".
 - **Escribirle a un trabajador desde el dashboard = link `wa.me`** desde el
   celular del dueño (gratis, siempre llega). Lo que manda el bot por API va con
   plantilla.
@@ -195,6 +211,7 @@ capataz/
 │   │   ├── timeutil.py           # fechas en hora local
 │   │   ├── phone.py              # normalización de teléfonos MX
 │   │   ├── geo.py                # geocerca: distancia a la obra, links de Google Maps
+│   │   ├── sites.py              # obra · sucursal · ruta · zona
 │   │   ├── migrations.py         # cambios de esquema idempotentes al arrancar
 │   │   ├── models/               # SQLAlchemy models
 │   │   ├── routers/
@@ -210,6 +227,7 @@ capataz/
 │   │       ├── notify.py         # mensajes proactivos (plantillas) + registro
 │   │       ├── scheduler.py      # recordatorios, resumen diario y borrado de ubicaciones
 │   │       ├── photos.py         # huella de fotos y detección de repetidas
+│   │       ├── activity.py       # qué significa cada mensaje (bitácora e historia)
 │   │       ├── storage.py        # subida a R2
 │   │       └── transcription.py  # cliente Whisper
 │   ├── tests/

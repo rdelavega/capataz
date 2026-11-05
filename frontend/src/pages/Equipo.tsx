@@ -1,13 +1,15 @@
 import { ChevronRight, ExternalLink, MapPin, MapPinOff, RefreshCw, Search, Star, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { BranchOption, CrewData, WorkerDetail, WorkersResponse } from '../api/client'
+import type { BranchOption, CrewData, SiteLabel, WorkerDetail, WorkersResponse } from '../api/client'
 import { createBranch, createWorker, fetchBranches, fetchCrews, fetchWorkers, updateBranch } from '../api/client'
+import { Avatar } from '../components/Avatar'
 import { CrewsBoard } from '../components/Crews'
 import { AttendanceStrip, StripLegend } from '../components/Attendance'
 import { LocationChip, TodayStatus } from '../components/TodayStatus'
 import { useWorkerDrawer } from '../components/WorkerDrawer'
-import { EVENT_LABEL, fmtHace, initials } from '../lib/format'
+import { EVENT_LABEL, fmtHace } from '../lib/format'
 import { usePolling } from '../lib/usePolling'
+import { siteWords, useSite } from '../lib/site'
 
 
 // ─── Modal: Agregar trabajador ────────────────────────────────────────────────
@@ -20,6 +22,7 @@ interface AddWorkerModalProps {
 }
 
 function AddWorkerModal({ branches, crews, onClose, onSaved }: AddWorkerModalProps) {
+  const site = useSite()
   const [name, setName]       = useState('')
   const [phone, setPhone]     = useState('+521')
   const [branchId, setBranch] = useState(branches[0]?.id ?? '')
@@ -76,7 +79,7 @@ function AddWorkerModal({ branches, crews, onClose, onSaved }: AddWorkerModalPro
             <p className="mt-1 text-xs text-[#8C7169]">+521 para móviles México</p>
           </div>
           <div>
-            <label className="label mb-1 block text-[#58423B]">Sucursal *</label>
+            <label className="label mb-1 block text-[#58423B]">{site.One} *</label>
             <select required value={branchId} onChange={e => setBranch(e.target.value)}
               className="label w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]">
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -121,10 +124,11 @@ function AddWorkerModal({ branches, crews, onClose, onSaved }: AddWorkerModalPro
 // ─── Modal: Agregar sucursal ──────────────────────────────────────────────────
 
 const LOCATION_HELP =
-  'En Google Maps busca la obra (o deja presionado el punto exacto), toca Compartir y pega aquí el link. ' +
+  'En Google Maps busca el lugar (o deja presionado el punto exacto), toca Compartir y pega aquí el link. ' +
   'También sirven coordenadas: 21.0190, -89.6237.'
 
 function AddBranchModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const site = useSite()
   const [name, setName]   = useState('')
   const [location, setLocation] = useState('')
   const [saving, setSaving] = useState(false)
@@ -152,7 +156,7 @@ function AddBranchModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     >
       <div className="w-full max-w-sm mx-4 border-2 border-[#2A2622] bg-[#FFF8F3] shadow-[6px_6px_0_0_#2A2622]">
         <div className="flex items-center justify-between border-b-2 border-[#2A2622] bg-[#ECE1D3] px-6 py-4">
-          <h2 className="hl-sm text-[#2A2622]">Agregar sucursal</h2>
+          <h2 className="hl-sm text-[#2A2622]">Agregar {site.one}</h2>
           <button
             onClick={onClose}
             className="label flex h-7 w-7 items-center justify-center border-2 border-[#2A2622] text-[#58423B] hover:bg-[#2A2622] hover:text-white transition-colors"
@@ -162,7 +166,7 @@ function AddBranchModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
           <div>
             <label className="label mb-1 block text-[#58423B]">Nombre *</label>
             <input required value={name} onChange={e => setName(e.target.value)}
-              placeholder="Obra Norte, Sucursal Centro..."
+              placeholder={`${site.One} Norte, ${site.One} Centro…`}
               autoFocus
               className="text-sm w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
           </div>
@@ -193,6 +197,7 @@ function AddBranchModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 // ─── Modal: Ubicación de la obra ──────────────────────────────────────────────
 
 function BranchLocationModal({ branch, onClose, onSaved }: { branch: BranchOption; onClose: () => void; onSaved: () => void }) {
+  const site = useSite()
   const [location, setLocation] = useState('')
   const [radius, setRadius]     = useState(String(branch.geofence_m))
   const [saving, setSaving]     = useState(false)
@@ -257,7 +262,7 @@ function BranchLocationModal({ branch, onClose, onSaved }: { branch: BranchOptio
             <label className="label mb-1 block text-[#58423B]" htmlFor="loc-radius">Radio (metros)</label>
             <input id="loc-radius" type="number" min={50} max={5000} step={50} value={radius} onChange={e => setRadius(e.target.value)}
               className="mono w-32 border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
-            <p className="mt-1 text-xs text-[#8C7169]">Súbelo si la obra es grande o el GPS falla seguido ahí.</p>
+            <p className="mt-1 text-xs text-[#8C7169]">Súbelo si la {site.one} es grande o el GPS falla seguido ahí.</p>
           </div>
           {error && <p className="text-sm text-[#A32D2D]">Error — {error}</p>}
           <div className="flex flex-wrap justify-end gap-3 border-t-2 border-[#E0C0B6] pt-4">
@@ -309,9 +314,7 @@ function WorkerRow({ w, onOpen }: { w: WorkerDetail; onOpen: () => void }) {
       <td className={`w-1.5 p-0 ${STRIPE[w.today_status ?? 'none']}`} aria-hidden="true" />
       <td className="px-3 py-2">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[#2A2622] bg-[#ECE1D3] font-headline text-xs font-semibold">
-            {initials(w.name)}
-          </span>
+          <Avatar name={w.name} photoUrl={w.photo_url} />
           <div className="min-w-0">
             <p className="truncate font-semibold leading-tight">{w.name}</p>
             <p className="truncate text-xs text-[#8C7169]">{w.title ?? 'Sin puesto'}</p>
@@ -356,6 +359,7 @@ function WorkerRow({ w, onOpen }: { w: WorkerDetail; onOpen: () => void }) {
 }
 
 function BranchLocationButton({ branch, onClick }: { branch?: BranchOption; onClick: (b: BranchOption) => void }) {
+  const site = useSite()
   if (!branch) return null
   return branch.has_location ? (
     <button onClick={() => onClick(branch)} className="ml-auto inline-flex items-center gap-1 text-xs text-[#58423B] hover:text-[#D85A30]"
@@ -364,8 +368,8 @@ function BranchLocationButton({ branch, onClick }: { branch?: BranchOption; onCl
     </button>
   ) : (
     <button onClick={() => onClick(branch)} className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-[#A5360D] underline underline-offset-2 hover:text-[#D85A30]"
-      title="Sin ubicación no se puede verificar que lleguen a la obra">
-      <MapPinOff size={12} aria-hidden="true" /> Fijar ubicación de la obra
+      title={`Sin ubicación no se puede verificar que lleguen a la ${site.one}`}>
+      <MapPinOff size={12} aria-hidden="true" /> Fijar ubicación de la {site.one}
     </button>
   )
 }
@@ -382,6 +386,7 @@ function groupSummary(ws: WorkerDetail[]): string {
 // ─── Página ───────────────────────────────────────────────────────────────────
 
 export function Equipo() {
+  const site = useSite()
   const [data, setData]       = useState<WorkersResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
@@ -415,7 +420,7 @@ export function Equipo() {
 
   function openModal() {
     if (branches.length === 0) {
-      setError('Primero crea una obra o sucursal con "+ Sucursal".')
+      setError(`Primero crea una ${site.one} con "+ ${site.One}".`)
       return
     }
     setShowModal(true)
@@ -439,7 +444,7 @@ export function Equipo() {
   const groups = useMemo(() => {
     const map = new Map<string, WorkerDetail[]>()
     for (const w of visible) {
-      const key = w.branch_name ?? 'Sin sucursal'
+      const key = w.branch_name ?? `Sin ${site.one}`
       map.set(key, [...(map.get(key) ?? []), w])
     }
     return [...map.entries()]
@@ -453,7 +458,18 @@ export function Equipo() {
           {data && <p className="label text-[#8C7169]">{counts.todos} activos</p>}
         </div>
         <div className="ml-auto flex gap-2 md:gap-3">
-          <button onClick={() => setShowBranchModal(true)} className="btn">+ Sucursal</button>
+          <label className="flex items-center gap-1.5 text-xs text-[#58423B]" title="Cómo le llamas a tus lugares de trabajo. Cambia en todo el panel.">
+            <span className="hidden sm:inline">Les llamas</span>
+            <select
+              value={site.label}
+              onChange={e => site.setLabel(e.target.value as SiteLabel).catch(err => setError(err instanceof Error ? err.message : 'No se pudo cambiar'))}
+              className="border-2 border-[#2A2622] bg-white px-1.5 py-1.5 text-xs font-semibold outline-none focus:border-[#D85A30]"
+              aria-label="Cómo le llamas a tus lugares de trabajo"
+            >
+              {site.options.map(o => <option key={o} value={o}>{siteWords(o, site.setLabel).Many}</option>)}
+            </select>
+          </label>
+          <button onClick={() => setShowBranchModal(true)} className="btn">+ {site.One}</button>
           <button onClick={openModal} className="btn btn-primary">+ Trabajador</button>
           <button onClick={() => load()} disabled={loading} className="btn" aria-label="Actualizar">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />

@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.attendance import AttendanceDaily
 from app.models.branch import Branch
+from app.models.company import Company
 from app.models.crew import Crew
 from app.models.event import Event
 from app.models.job import Job
@@ -25,6 +26,7 @@ from app.models.notification import Notification
 from app.models.worker import Worker
 from app.geo import fmt_distance
 from app.services import photos as photo_svc
+from app.sites import site_or_default
 from app.timeutil import (
     TZ, fmt_cuando, fmt_dia, fmt_hora, is_rest_day, late_cutoff, local_date, local_now, to_local,
 )
@@ -94,6 +96,7 @@ class Snapshot:
     reminders_today: dict[tuple[str, uuid.UUID | None], datetime] = field(default_factory=dict)
     # Foto original de cada foto repetida (por id de la original).
     originals: dict[uuid.UUID, dict] = field(default_factory=dict)
+    site: str = "obra"  # cómo le llama la empresa a sus lugares (app/sites.py)
 
     def worker_start(self, w: Worker) -> date:
         return to_local(w.created_at).date() if w.created_at else self.today - timedelta(days=365)
@@ -195,10 +198,12 @@ async def load_snapshot(session: AsyncSession, company_id: uuid.UUID) -> Snapsho
         key_id = n.job_id if n.kind == "job_progress" else n.worker_id
         reminders[(n.kind, key_id)] = n.sent_at
 
+    company = await session.get(Company, company_id)
     return Snapshot(
         today=today, now=now, branches=branches, workers=workers, attendance=attendance,
         jobs=jobs, photos_by_job=photos_by_job, events_today=events_today,
         last_event=last_event, crews=crews, reminders_today=reminders, originals=originals,
+        site=site_or_default(company.site_label if company else None),
     )
 
 
@@ -209,7 +214,7 @@ SEVERITY_ORDER = {"urgent": 0, "review": 1, "warn": 2}
 
 def attention_items(s: Snapshot) -> list[dict]:
     items: list[dict] = []
-    branch_name = lambda bid: s.branches[bid].name if bid in s.branches else "Sin sucursal"  # noqa: E731
+    branch_name = lambda bid: s.branches[bid].name if bid in s.branches else f"Sin {s.site}"  # noqa: E731
 
     # 1. No ha llegado / avisó que no viene
     if not is_rest_day(s.today) and s.now >= late_cutoff(s.today):
@@ -312,7 +317,7 @@ def attention_items(s: Snapshot) -> list[dict]:
     for w in s.workers:
         rec = s.attendance.get(w.id, {}).get(s.today)
         if rec and rec.location_status == "lejos" and rec.status in ("presente", "tarde"):
-            obra = branch_name(rec.location_branch_id) if rec.location_branch_id else "su obra"
+            obra = branch_name(rec.location_branch_id) if rec.location_branch_id else f"su {s.site}"
             items.append({
                 "id": f"lejos:{w.id}", "severity": "warn", "kind": "lejos_de_obra",
                 "title": f"{w.name} checó a {fmt_distance(rec.location_distance_m or 0)} de {obra}",
@@ -523,6 +528,7 @@ def worker_row(s: Snapshot, w: Worker) -> dict:
     crew = s.crews.get(w.crew_id) if w.crew_id else None
     return {
         "id": str(w.id), "name": w.name, "phone_number": w.phone_number, "title": w.title,
+        "photo_url": w.photo_url,
         "branch_id": str(w.branch_id) if w.branch_id else None,
         "branch_name": s.branches[w.branch_id].name if w.branch_id in s.branches else None,
         "active": w.active,
@@ -531,7 +537,7 @@ def worker_row(s: Snapshot, w: Worker) -> dict:
         "is_lead": bool(crew and crew.lead_worker_id == w.id),
         "today_status": rec.status if rec else None,
         "checkin_at": rec.checkin_at.isoformat() if rec and rec.checkin_at else None,
-        "location": location_info(s, rec),
+        "location": location_info(s.branches, rec, s.site),
         "last_event": {"type": last.event_type, "received_at": last.received_at.isoformat()} if last else None,
         "active_jobs": sum(j.status in (*OPEN_STATUSES, "por_revisar") for j in wjobs),
         "overdue_jobs": sum(job_is_overdue(j, s.today) for j in wjobs),
@@ -541,14 +547,14 @@ def worker_row(s: Snapshot, w: Worker) -> dict:
     }
 
 
-def location_info(s: Snapshot, rec: AttendanceDaily | None) -> dict | None:
+def location_info(branches: dict[uuid.UUID, Branch], rec: AttendanceDaily | None, site: str = "obra") -> dict | None:
     """Resultado de la verificación del check-in de hoy. Nunca incluye coordenadas."""
     if rec is None or rec.status not in ("presente", "tarde"):
         return None
     status = rec.location_status or "sin_ubicacion"
-    obra = s.branches[rec.location_branch_id].name if rec.location_branch_id in s.branches else None
+    obra = branches[rec.location_branch_id].name if rec.location_branch_id in branches else None
     label = {
-        "en_sitio": f"En {obra}" if obra else "En obra",
+        "en_sitio": f"En {obra}" if obra else f"En {site}",
         "lejos": f"A {fmt_distance(rec.location_distance_m or 0)}" + (f" de {obra}" if obra else ""),
         "sin_referencia": "Ubicación sin comparar",
         "sin_ubicacion": "Sin ubicación",

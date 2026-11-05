@@ -12,9 +12,11 @@ from app.config import settings
 from app.db import get_db
 from app.models.branch import Branch
 from app.models.crew import Crew
+from app.models.event import Event
 from app.models.job import Job
+from app.models.notification import Notification
 from app.models.worker import Worker
-from app.services import insights, notify, whatsapp
+from app.services import activity, insights, notify, whatsapp
 from app.services import photos as photo_svc
 from app.timeutil import local_today
 
@@ -86,6 +88,62 @@ async def list_jobs(
             "updated_at": job.updated_at.isoformat(),
         })
     return {"jobs": jobs, "date": snap.today.isoformat()}
+
+
+NOTIFICATION_LABEL = {
+    "job_assigned": "El bot le avisó del trabajo",
+    "job_progress": "El bot preguntó cómo va",
+}
+
+
+@router.get("/{job_id}")
+async def job_detail(job_id: uuid.UUID, session: AsyncSession = Depends(get_db)) -> dict:
+    """Todo sobre un trabajo: datos, todas sus fotos y su historia, de más vieja a más nueva."""
+    job = await _get_job(session, job_id)
+    snap = await insights.load_snapshot(session, uuid.UUID(settings.company_id))
+    names = {w.id: w.name for w in (await session.execute(
+        select(Worker).where(Worker.company_id == job.company_id)
+    )).scalars()}
+    events = list((await session.execute(
+        select(Event).where(Event.job_id == job.id).order_by(Event.received_at)
+    )).scalars())
+    sent = list((await session.execute(
+        select(Notification).where(Notification.job_id == job.id).order_by(Notification.sent_at)
+    )).scalars())
+    originals = await photo_svc.load_originals(session, events)
+
+    history: list[dict] = [{"at": job.created_at.isoformat(), "kind": "creado", "label": "Lo creaste", "who": None}]
+    for n in sent:
+        history.append({
+            "at": n.sent_at.isoformat(), "kind": "bot" if n.ok else "bot_error", "who": names.get(n.worker_id),
+            "label": NOTIFICATION_LABEL.get(n.kind, "El bot le escribió") if n.ok
+            else "El bot no le pudo escribir (no ha escrito en 24 h)",
+        })
+    for e in events:
+        c = activity.classify(e)
+        if c["kind"] in ("ignorar", "checkin", "location"):
+            continue
+        history.append({
+            "at": e.received_at.isoformat(), "kind": c["kind"], "who": names.get(e.worker_id),
+            "label": "Mandó foto" if c["kind"] == "photo" else c["label"] or "Escribió",
+            "text": c["text"] if c["kind"] in ("problema_detalle", "report") else None,
+            "photo": photo_svc.photo_dict(e, originals) if c["kind"] == "photo" and e.media_url else None,
+        })
+    if job.approved_at:
+        history.append({"at": job.approved_at.isoformat(), "kind": "aprobado", "label": "Lo aprobaste", "who": None})
+    history.sort(key=lambda h: h["at"])
+
+    branch = snap.branches.get(job.branch_id) if job.branch_id else None
+    return {
+        **insights.job_card(snap, job),
+        "description": job.description,
+        "branch_name": branch.name if branch else None,
+        "created_at": job.created_at.isoformat(),
+        "approved_at": job.approved_at.isoformat() if job.approved_at else None,
+        "review_note": job.review_note,
+        "photos": [photo_svc.photo_dict(e, originals) for e in events if e.event_type == "photo" and e.media_url],
+        "history": history,
+    }
 
 
 @router.post("", status_code=201)

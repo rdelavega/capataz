@@ -7,6 +7,8 @@ import { PhotoLightbox, PhotoThumb, type LightboxEntry } from '../components/Pho
 import { useWorkerDrawer } from '../components/WorkerDrawer'
 import { compareWith, fmtCuando, fmtDia, fmtHora, firstName, initials, parseDay, plural, waLink } from '../lib/format'
 import { usePolling } from '../lib/usePolling'
+import { useSite } from '../lib/site'
+import { JobDrawer } from '../components/JobDrawer'
 
 type Column = 'atrasadas' | 'por_revisar' | 'en_curso' | 'terminadas'
 
@@ -32,6 +34,7 @@ function closedOnTime(j: JobData): boolean {
 }
 
 export function Tareas() {
+  const site = useSite()
   const [jobs, setJobs]       = useState<JobData[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr]         = useState<string | null>(null)
@@ -42,6 +45,7 @@ export function Tareas() {
   const [now, setNow]         = useState(() => Date.now())
   const [notice, setNotice]   = useState<string | null>(null)
   const { version, bump } = useWorkerDrawer()
+  const [openJob, setOpenJob] = useState<string | null>(null)
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -159,7 +163,7 @@ export function Tareas() {
         </div>
 
         {branches.length > 1 && (
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por sucursal">
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Filtrar por ${site.one}`}>
             {['', ...branches].map(b => (
               <button
                 key={b || 'todas'}
@@ -167,7 +171,7 @@ export function Tareas() {
                 aria-pressed={branch === b}
                 className={`label border-2 border-[#2A2622] px-2.5 py-1.5 ${branch === b ? 'bg-[#2A2622] text-white' : 'bg-[#FFF8F3] hover:bg-[#ECE1D3]'}`}
               >
-                {b || 'Todas las sucursales'}
+                {b || `Todas las ${site.many}`}
               </button>
             ))}
           </div>
@@ -187,7 +191,7 @@ export function Tareas() {
                   <p className="mono border-2 border-dashed border-[#C9B8AC] px-3 py-5 text-center text-xs text-[#8C7169]">{c.empty}</p>
                 )}
                 {byColumn[c.key].map(j => (
-                  <JobCard key={j.id} job={j} column={c.key} onChanged={afterChange} onPhoto={setPhoto} />
+                  <JobCard key={j.id} job={j} column={c.key} onChanged={afterChange} onPhoto={setPhoto} onOpen={() => setOpenJob(j.id)} />
                 ))}
                 {c.key === 'terminadas' && (
                   <button className="mono py-1 text-xs text-[#58423B] underline underline-offset-2" onClick={() => setShowAllDone(v => !v)}>
@@ -206,6 +210,7 @@ export function Tareas() {
           onCreated={msg => { afterChange(); if (msg) setNotice(msg) }}
         />
       )}
+      {openJob && <JobDrawer key={openJob} jobId={openJob} onClose={() => setOpenJob(null)} onChanged={afterChange} />}
       {photo && <PhotoLightbox entry={photo} onClose={() => setPhoto(null)} />}
     </div>
   )
@@ -220,11 +225,13 @@ const MOVE_OPTIONS: { value: JobStatus; label: string }[] = [
   { value: 'completado', label: 'Terminada (sin revisar)' },
 ]
 
-function JobCard({ job: j, column, onChanged, onPhoto }: {
+function JobCard({ job: j, column, onChanged, onPhoto, onOpen }: {
   job: JobData
   column: Column
   onChanged: () => void
   onPhoto: (e: LightboxEntry) => void
+  /** Abre el detalle del trabajo (al tocar la tarjeta fuera de sus botones). */
+  onOpen: () => void
 }) {
   const { openWorker } = useWorkerDrawer()
   const [busy, setBusy] = useState(false)
@@ -252,8 +259,11 @@ function JobCard({ job: j, column, onChanged, onPhoto }: {
   const n = firstName(j.contact_name)
 
   return (
-    <article className={`space-y-2 border-2 border-[#2A2622] bg-[#FFF8F3] p-3 ${column === 'terminadas' ? 'opacity-90' : ''}`}>
-      <p className="font-semibold leading-snug">{j.title}</p>
+    <article
+      onClick={e => { if (!(e.target as HTMLElement).closest('button, a, input, textarea, select, label, form')) onOpen() }}
+      className={`cursor-pointer space-y-2 border-2 border-[#2A2622] bg-[#FFF8F3] p-3 transition-colors hover:bg-[#FBEBDD] ${column === 'terminadas' ? 'opacity-90' : ''}`}
+    >
+      <button onClick={onOpen} className="text-left font-semibold leading-snug hover:text-[#D85A30]">{j.title}</button>
 
       {j.crew_name || j.worker_name ? (
         <button className="group flex w-full min-w-0 items-center gap-2 text-left" onClick={() => j.contact_id && openWorker(j.contact_id)}

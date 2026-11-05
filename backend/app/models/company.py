@@ -13,6 +13,8 @@ class Company(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String, nullable=False)
     slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    # Cómo le llaman a sus lugares de trabajo: obra · sucursal · ruta · zona (ver app/sites.py)
+    site_label: Mapped[str] = mapped_column(String, nullable=False, default="obra", server_default="obra")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     branches: Mapped[list["Branch"]] = relationship(back_populates="company")  # noqa: F821

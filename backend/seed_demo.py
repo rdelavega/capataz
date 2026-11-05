@@ -177,6 +177,9 @@ FAR_INDEX = 2           # checó a ~2.4 km de su obra
 NO_LOCATION_INDEX = 5   # checó sin mandar ubicación
 DUPLICATE_PHOTO = 2     # esta foto de hoy es copia de una de días pasados
 
+# Cómo le llama cada giro a sus lugares de trabajo (app/sites.py)
+SITE_BY_GIRO = {"construccion": "obra", "taller": "sucursal", "distribuidora": "ruta", "servicios": "zona"}
+
 # Dos puntos de Mérida (~7.6 km entre sí) para las obras de cualquier giro.
 BRANCH_COORDS = [(21.0190, -89.6237), (21.0449, -89.5555)]
 FAR_OFFSET = (0.0215, 0.0040)  # ~2.4 km al norte
@@ -264,6 +267,7 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
         if company is None:
             raise SystemExit(f"No existe la empresa {company_id}; corre seed.py primero")
         company.name = empresa
+        company.site_label = SITE_BY_GIRO[giro]
 
         branches = [
             Branch(company_id=company_id, name=n, latitude=BRANCH_COORDS[i % 2][0], longitude=BRANCH_COORDS[i % 2][1])

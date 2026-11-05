@@ -3,12 +3,14 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { WorkerSummary } from '../api/client'
 import type { BranchOption, CrewData } from '../api/client'
 import { deactivateWorker, fetchBranches, fetchCrews, fetchWorkerSummary, updateWorker, updateWorkerTitle } from '../api/client'
-import { compareWith, fmtDia, fmtHace, fmtHora, firstName, initials, waLink } from '../lib/format'
+import { compareWith, fmtDia, fmtHace, fmtHora, firstName, waLink } from '../lib/format'
 import { AttendanceCalendar } from './Attendance'
 import { NewJobModal } from './NewJobModal'
 import { PhotoLightbox, PhotoThumb, type LightboxEntry } from './PhotoLightbox'
+import { EditableAvatar } from './Avatar'
 import { LocationChip, TodayStatus } from './TodayStatus'
 import { usePolling } from '../lib/usePolling'
+import { useSite } from '../lib/site'
 
 // ─── Contexto: cualquier pantalla puede abrir la ficha ───────────────────────
 
@@ -87,9 +89,11 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
         {/* Encabezado */}
         <div className="sticky top-0 z-10 space-y-3 border-b-2 border-[#2A2622] bg-[#FFF8F3] px-5 pb-4 pt-5">
           <div className="flex items-start gap-3">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center border-2 border-[#2A2622] bg-[#ECE1D3]">
-              <span className="hl-md">{w ? initials(w.name) : '…'}</span>
-            </div>
+            {w ? (
+              <EditableAvatar workerId={w.id} name={w.name} photoUrl={w.photo_url} onChanged={() => { load(); onChanged() }} />
+            ) : (
+              <div className="h-14 w-14 shrink-0 border-2 border-[#2A2622] bg-[#ECE1D3]" />
+            )}
             <div className="min-w-0 flex-1">
               <h2 className="hl-md leading-tight text-[#2A2622]">{w?.name ?? 'Cargando…'}</h2>
               {w && (
@@ -374,6 +378,7 @@ function Placement({ workerId, crewId, branchId, onChanged }: {
   branchId: string | null
   onChanged: () => void
 }) {
+  const site = useSite()
   const [crews, setCrews] = useState<CrewData[]>([])
   const [branches, setBranches] = useState<BranchOption[]>([])
   const [busy, setBusy] = useState(false)
@@ -382,7 +387,7 @@ function Placement({ workerId, crewId, branchId, onChanged }: {
   useEffect(() => {
     Promise.all([fetchCrews(), fetchBranches()])
       .then(([c, b]) => { setCrews(c.crews); setBranches(b.branches) })
-      .catch(() => setErr('No se pudieron cargar cuadrillas y obras'))
+      .catch(() => setErr(`No se pudieron cargar cuadrillas y ${site.many}`))
   }, [])
 
   async function save(data: { crew_id?: string | null; branch_id?: string | null }) {
@@ -410,10 +415,10 @@ function Placement({ workerId, crewId, branchId, onChanged }: {
         </select>
       </div>
       <div>
-        <label htmlFor="worker-branch" className="label text-[#58423B]">Obra / sucursal</label>
+        <label htmlFor="worker-branch" className="label text-[#58423B]">{site.One}</label>
         <select id="worker-branch" className={sel} disabled={busy} value={branchId ?? ''}
           onChange={e => save({ branch_id: e.target.value || null })}>
-          <option value="">Sin obra</option>
+          <option value="">Sin {site.one}</option>
           {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
       </div>

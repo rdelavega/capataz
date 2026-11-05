@@ -9,12 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import geo
 from app.config import settings
 from app.db import get_db
+from app.models.attendance import AttendanceDaily
 from app.models.branch import Branch
+from app.models.company import Company
 from app.models.event import Event
 from app.models.job import Job
 from app.models.worker import Worker
-from app.services import insights
+from app.services import activity, insights
 from app.services import photos as photo_svc
+from app.sites import site_or_default
 from app.timeutil import greeting, local_date, local_today
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -52,6 +55,92 @@ async def get_today(session: AsyncSession = Depends(get_db)) -> dict:
         "branches": insights.branch_stats(s),
         "feed": feed,
     }
+
+
+# ─── /day: bitácora del día por persona ───────────────────────────────────────
+
+@router.get("/day")
+async def get_day(
+    work_date: Optional[str] = Query(default=None, alias="date"),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Lo que hizo cada quien en un día, por obra: llegada, fotos, reportes y lo
+    que pasó con cada trabajo. Sin acuses sueltos ni botones: para eso está
+    /events (todos los mensajes).
+    """
+    company_id = uuid.UUID(settings.company_id)
+    day = date.fromisoformat(work_date) if work_date else local_today()
+
+    branches = {b.id: b for b in (await session.execute(
+        select(Branch).where(Branch.company_id == company_id).order_by(Branch.name)
+    )).scalars()}
+    events = list((await session.execute(
+        select(Event).where(
+            Event.company_id == company_id, local_date(Event.received_at) == day,
+            Event.worker_id.is_not(None),
+        ).order_by(Event.received_at)
+    )).scalars())
+    with_events = {e.worker_id for e in events}
+    workers = [w for w in (await session.execute(
+        select(Worker).where(Worker.company_id == company_id).order_by(Worker.name)
+    )).scalars() if w.active or w.id in with_events]
+    attendance = {a.worker_id: a for a in (await session.execute(
+        select(AttendanceDaily).where(AttendanceDaily.company_id == company_id, AttendanceDaily.work_date == day)
+    )).scalars()}
+    job_ids = {e.job_id for e in events if e.job_id}
+    jobs = {j.id: j for j in (await session.execute(select(Job).where(Job.id.in_(job_ids)))).scalars()} if job_ids else {}
+    originals = await photo_svc.load_originals(session, events)
+
+    company = await session.get(Company, company_id)
+    site = site_or_default(company.site_label if company else None)
+
+    by_worker: dict[uuid.UUID, list[Event]] = {}
+    for e in events:
+        by_worker.setdefault(e.worker_id, []).append(e)
+
+    def card(w: Worker) -> dict:
+        rec = attendance.get(w.id)
+        photos, reports, job_activity = [], [], {}
+        for e in by_worker.get(w.id, []):
+            c = activity.classify(e)
+            job = jobs.get(e.job_id) if e.job_id else None
+            if c["kind"] == "photo" and e.media_url:
+                photos.append(photo_svc.photo_dict(e, originals, job_title=job.title if job else None))
+            if job and c["kind"] in ("photo", "enterado", "termino", "en_progreso", "problema", "problema_detalle"):
+                entry = job_activity.setdefault(job.id, {"job_id": str(job.id), "title": job.title,
+                                                         "status": job.status, "activity": []})
+                entry["activity"].append({
+                    "kind": c["kind"], "at": e.received_at.isoformat(),
+                    "label": "Foto de avance" if c["kind"] == "photo" else c["label"],
+                    "text": c["text"] if c["kind"] == "problema_detalle" else None,
+                })
+            elif c["kind"] == "report":
+                reports.append({"id": str(e.id), "type": e.event_type, "received_at": e.received_at.isoformat(),
+                                "text": c["text"], "media_url": e.media_url})
+        return {
+            "id": str(w.id), "name": w.name, "title": w.title, "active": w.active, "photo_url": w.photo_url,
+            "attendance": {
+                "status": rec.status, "checkin_at": rec.checkin_at.isoformat() if rec.checkin_at else None,
+                "location": insights.location_info(branches, rec, site),
+            } if rec else None,
+            "photos": photos, "reports": reports, "jobs": list(job_activity.values()),
+            "messages": len(by_worker.get(w.id, [])),
+        }
+
+    groups: dict[uuid.UUID | None, list[dict]] = {}
+    for w in workers:
+        groups.setdefault(w.branch_id if w.branch_id in branches else None, []).append(card(w))
+    out = []
+    for bid in [*branches, None]:
+        cards = groups.get(bid)
+        if not cards:
+            continue
+        # Primero quien hizo algo; al final quien no mandó nada
+        cards.sort(key=lambda c: (c["messages"] == 0 and c["attendance"] is None, c["name"]))
+        out.append({"id": str(bid) if bid else None, "name": branches[bid].name if bid else f"Sin {site}",
+                    "workers": cards})
+    return {"date": day.isoformat(), "branches": out, "messages": len(events)}
 
 
 # ─── /events ──────────────────────────────────────────────────────────────────
@@ -134,6 +223,7 @@ async def get_workers(session: AsyncSession = Depends(get_db)) -> dict:
     for w, b in inactive:
         rows.append({
             "id": str(w.id), "name": w.name, "phone_number": w.phone_number, "title": w.title,
+            "photo_url": w.photo_url,
             "branch_id": str(w.branch_id) if w.branch_id else None,
             "branch_name": b.name if b else None, "active": False,
             "crew_id": None, "crew_name": None, "is_lead": False,

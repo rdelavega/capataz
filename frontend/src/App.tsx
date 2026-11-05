@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { type AuthUser, getStoredUser, logout } from './api/client'
 import { MobileNav, type Page, Sidebar } from './components/Sidebar'
+import { SiteProvider } from './components/SiteProvider'
 import { WorkerDrawerProvider } from './components/WorkerDrawer'
 import { Dashboard } from './pages/Dashboard'
 import { Equipo } from './pages/Equipo'
@@ -22,6 +23,7 @@ export default function App() {
   }
 
   return (
+    <SiteProvider>
     <WorkerDrawerProvider>
       <div className="flex min-h-screen bg-[#F2EDE4]">
         <Sidebar current={page} onNavigate={setPage} user={user} onLogout={handleLogout} />
@@ -34,5 +36,6 @@ export default function App() {
         <MobileNav current={page} onNavigate={setPage} onLogout={handleLogout} />
       </div>
     </WorkerDrawerProvider>
+    </SiteProvider>
   )
 }

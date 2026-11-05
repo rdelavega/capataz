@@ -2,10 +2,12 @@ import { MessageCircle, Pencil, Plus, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { BranchOption, CrewData, WorkerDetail } from '../api/client'
 import { createCrew, deleteCrew, updateCrew } from '../api/client'
-import { firstName, initials, waLink } from '../lib/format'
+import { firstName, waLink } from '../lib/format'
 import { NewJobModal } from './NewJobModal'
 import { TodayStatus } from './TodayStatus'
 import { useWorkerDrawer } from './WorkerDrawer'
+import { useSite } from '../lib/site'
+import { Avatar } from './Avatar'
 
 /** Cuadrillas: equipos con encargado. El bot habla con el encargado sobre los trabajos. */
 export function CrewsBoard({ crews, branches, workers, onChanged }: {
@@ -14,6 +16,7 @@ export function CrewsBoard({ crews, branches, workers, onChanged }: {
   workers: WorkerDetail[]
   onChanged: () => void
 }) {
+  const site = useSite()
   const [editing, setEditing] = useState<CrewData | 'new' | null>(null)
   const [jobFor, setJobFor] = useState<string | null>(null)
   const active = workers.filter(w => w.active)
@@ -33,7 +36,7 @@ export function CrewsBoard({ crews, branches, workers, onChanged }: {
       {crews.length === 0 && (
         <div className="border-2 border-dashed border-[#C9B8AC] bg-[#FFF8F3] px-6 py-10 text-center">
           <p className="hl-sm text-[#8C7169]">Todavía no hay cuadrillas</p>
-          <p className="mono mt-1 text-xs text-[#8C7169]">Arma la primera: ponle nombre, su obra y quién es el encargado.</p>
+          <p className="mono mt-1 text-xs text-[#8C7169]">Arma la primera: ponle nombre, su {site.one} y quién es el encargado.</p>
         </div>
       )}
 
@@ -46,7 +49,7 @@ export function CrewsBoard({ crews, branches, workers, onChanged }: {
             <CrewCard
               key={c.id}
               crew={c}
-              where={branchName(c.branch_id) ?? 'Se mueve entre obras'}
+              where={branchName(c.branch_id) ?? `Se mueve entre ${site.many}`}
               lead={lead}
               members={members}
               here={here}
@@ -133,9 +136,7 @@ function CrewCard({ crew, where, lead, members, here, onEdit, onNewJob }: {
         {sorted.map(w => (
           <li key={w.id} className="border-b border-[#E0C0B6] last:border-b-0">
             <button className="flex w-full items-center gap-2.5 px-4 py-2 text-left hover:bg-[#FBEBDD]" onClick={() => openWorker(w.id)}>
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center border border-[#2A2622] bg-[#ECE1D3] font-headline text-[10px] font-semibold">
-                {initials(w.name)}
-              </span>
+              <Avatar name={w.name} photoUrl={w.photo_url} className="h-7 w-7" textClass="font-headline text-[10px] font-semibold" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{w.name}</span>
                 <span className="mono block truncate text-[10.5px] text-[#8C7169]">{w.title ?? 'Sin puesto'}</span>
@@ -160,6 +161,7 @@ function CrewModal({ crew, branches, workers, onClose, onSaved }: {
   onClose: () => void
   onSaved: () => void
 }) {
+  const site = useSite()
   const [name, setName] = useState(crew?.name ?? '')
   const [branchId, setBranchId] = useState(crew?.branch_id ?? '')
   const [leadId, setLeadId] = useState(crew?.lead_worker_id ?? '')
@@ -210,9 +212,9 @@ function CrewModal({ crew, branches, workers, onClose, onSaved }: {
               placeholder="Albañiles Altabrisa, Cuadrilla Norte, Instalaciones…" className={input} />
           </div>
           <div>
-            <label htmlFor="crew-branch" className="label text-[#58423B]">Obra / sucursal</label>
+            <label htmlFor="crew-branch" className="label text-[#58423B]">{site.One}</label>
             <select id="crew-branch" value={branchId} onChange={e => setBranchId(e.target.value)} className={input}>
-              <option value="">Se mueve entre obras</option>
+              <option value="">Se mueve entre {site.many}</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>

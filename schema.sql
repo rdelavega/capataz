@@ -51,6 +51,7 @@ CREATE TABLE workers (
     name         TEXT NOT NULL,
     phone_number TEXT NOT NULL,           -- E.164, e.g. +5215512345678
     title        TEXT,                    -- puesto (Albañil, Electricista…)
+    photo_url    TEXT,                    -- foto de perfil (la sube el dueño)
     crew_id      UUID REFERENCES crews(id) ON DELETE SET NULL,
     location_notice_at TIMESTAMPTZ,       -- cuándo se le explicó el uso de su ubicación
     active       BOOLEAN NOT NULL DEFAULT TRUE,

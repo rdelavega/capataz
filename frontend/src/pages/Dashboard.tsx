@@ -8,6 +8,7 @@ import { PhotoLightbox, PhotoThumb, type LightboxEntry } from '../components/Pho
 import { useWorkerDrawer } from '../components/WorkerDrawer'
 import { fmtCuando, fmtFechaLarga, fmtHora, firstName, plural, waLink } from '../lib/format'
 import { usePolling } from '../lib/usePolling'
+import { useSite } from '../lib/site'
 
 
 export function Dashboard({ userName, onNavigate }: { userName: string; onNavigate: (p: Page) => void }) {
@@ -255,13 +256,14 @@ function Meter({ value, total, left, right }: { value: number; total: number; le
 }
 
 function BranchTable({ branches }: { branches: BranchStat[] }) {
+  const site = useSite()
   return (
     <section className="border-2 border-[#2A2622] bg-[#FFF8F3]">
       <div className="flex items-center justify-between border-b-2 border-[#2A2622] px-4 py-2.5">
-        <h2 className="hl-sm">Sucursales</h2>
+        <h2 className="hl-sm">{site.Many}</h2>
         <span className="label text-[#8C7169]">semáforo de hoy</span>
       </div>
-      {branches.length === 0 && <p className="text-sm px-4 py-8 text-center text-[#8C7169]">No hay sucursales todavía.</p>}
+      {branches.length === 0 && <p className="text-sm px-4 py-8 text-center text-[#8C7169]">No hay {site.many} todavía.</p>}
       <ul>
         {branches.map(b => {
           const s = SEMAFORO[b.semaforo]
