@@ -15,6 +15,7 @@ from app.models.crew import Crew
 from app.models.job import Job
 from app.models.worker import Worker
 from app.services import insights, notify, whatsapp
+from app.services import photos as photo_svc
 from app.timeutil import local_today
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -80,11 +81,7 @@ async def list_jobs(
             "approved_at": job.approved_at.isoformat() if job.approved_at else None,
             "closed_at": c.isoformat() if (c := insights.job_closed_at(job)) else None,
             "review_note": job.review_note,
-            "photos": [
-                {"id": str(p.id), "url": p.media_url, "received_at": p.received_at.isoformat(),
-                 "caption": p.text_content}
-                for p in photos if p.media_url
-            ][-4:],
+            "photos": [photo_svc.photo_dict(p, snap.originals) for p in photos if p.media_url][-4:],
             "created_at": job.created_at.isoformat(),
             "updated_at": job.updated_at.isoformat(),
         })

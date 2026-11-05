@@ -54,6 +54,18 @@ STATEMENTS: list[str] = [
         PRIMARY KEY (kind, run_date)
     )
     """,
+    # Verificación de presencia (geocerca) y fotos repetidas
+    "ALTER TABLE branches ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION",
+    "ALTER TABLE branches ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION",
+    "ALTER TABLE branches ADD COLUMN IF NOT EXISTS geofence_m INTEGER",
+    "ALTER TABLE attendance_daily ADD COLUMN IF NOT EXISTS location_status TEXT",
+    "ALTER TABLE attendance_daily ADD COLUMN IF NOT EXISTS location_distance_m INTEGER",
+    "ALTER TABLE attendance_daily ADD COLUMN IF NOT EXISTS location_branch_id UUID REFERENCES branches(id) ON DELETE SET NULL",
+    "ALTER TABLE attendance_daily ADD COLUMN IF NOT EXISTS location_at TIMESTAMPTZ",
+    "ALTER TABLE events ADD COLUMN IF NOT EXISTS photo_hash TEXT",
+    "ALTER TABLE events ADD COLUMN IF NOT EXISTS duplicate_of_id UUID REFERENCES events(id) ON DELETE SET NULL",
+    "CREATE INDEX IF NOT EXISTS idx_events_photo_hash ON events (company_id, received_at) WHERE photo_hash IS NOT NULL",
+    "ALTER TABLE workers ADD COLUMN IF NOT EXISTS location_notice_at TIMESTAMPTZ",
 ]
 
 

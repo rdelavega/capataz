@@ -52,3 +52,17 @@ def test_endpoint_rechaza_firma_invalida(monkeypatch) -> None:
         assert resp.status_code == 401
     finally:
         app.dependency_overrides.clear()
+
+
+def test_cada_evento_guarda_solo_su_mensaje() -> None:
+    from app.routers.webhook import single_message_payload
+
+    loc = {"id": "wamid.2", "type": "location", "location": {"latitude": 21.0, "longitude": -89.6}}
+    change = {"field": "messages", "value": {
+        "metadata": {"phone_number_id": "1"}, "contacts": [{"wa_id": "5219991234567"}],
+        "messages": [{"id": "wamid.1", "type": "text", "text": {"body": "presente"}}, loc],
+    }}
+    payload = {"object": "whatsapp_business_account", "entry": [{"id": "e1", "changes": [change]}]}
+    single = single_message_payload(payload, payload["entry"][0], change, change["value"]["messages"][0])
+    assert "latitude" not in str(single)
+    assert single["entry"][0]["changes"][0]["value"]["contacts"] == [{"wa_id": "5219991234567"}]

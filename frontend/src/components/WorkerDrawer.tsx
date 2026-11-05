@@ -3,11 +3,11 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { WorkerSummary } from '../api/client'
 import type { BranchOption, CrewData } from '../api/client'
 import { deactivateWorker, fetchBranches, fetchCrews, fetchWorkerSummary, updateWorker, updateWorkerTitle } from '../api/client'
-import { fmtDia, fmtHace, fmtHora, firstName, initials, waLink } from '../lib/format'
+import { compareWith, fmtDia, fmtHace, fmtHora, firstName, initials, waLink } from '../lib/format'
 import { AttendanceCalendar } from './Attendance'
 import { NewJobModal } from './NewJobModal'
 import { PhotoLightbox, PhotoThumb, type LightboxEntry } from './PhotoLightbox'
-import { TodayStatus } from './TodayStatus'
+import { LocationChip, TodayStatus } from './TodayStatus'
 
 // ─── Contexto: cualquier pantalla puede abrir la ficha ───────────────────────
 
@@ -111,6 +111,7 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
             <>
               <div className="flex flex-wrap items-center gap-2">
                 <TodayStatus status={w.today_status} checkinAt={w.checkin_at} />
+                <LocationChip location={w.location} />
                 <span className="label ml-auto text-[#8C7169]">
                   último reporte {w.last_event ? fmtHace(w.last_event.received_at) : 'nunca'}
                 </span>
@@ -180,7 +181,8 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
                           <PhotoThumb
                             url={e.media_url}
                             className="mt-1.5 w-28"
-                            onOpen={() => setPhoto({ url: e.media_url!, title: w.name, subtitle: fmtHora(e.received_at) })}
+                            duplicate={!!e.duplicate_of}
+                            onOpen={() => setPhoto({ url: e.media_url!, title: w.name, subtitle: fmtHora(e.received_at), compare: compareWith(e.duplicate_of) })}
                           />
                         )}
                       </div>
@@ -228,7 +230,8 @@ function WorkerDrawer({ workerId, onClose, onChanged }: {
                       key={p.id}
                       url={p.url}
                       label={`${p.job_title ?? 'Foto'} · ${fmtDia(p.received_at)}`}
-                      onOpen={() => setPhoto({ url: p.url, title: p.job_title ?? w.name, subtitle: `${fmtDia(p.received_at)} ${fmtHora(p.received_at)}` })}
+                      duplicate={!!p.duplicate_of}
+                      onOpen={() => setPhoto({ url: p.url, title: p.job_title ?? w.name, subtitle: `${fmtDia(p.received_at)} ${fmtHora(p.received_at)}`, compare: compareWith(p.duplicate_of) })}
                     />
                   ))}
                 </div>

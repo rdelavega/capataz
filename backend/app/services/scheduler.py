@@ -4,6 +4,8 @@ Envíos programados: el bot persigue a la gente para que el dueño no tenga que.
 - checkin_reminder (08:30): a quien no ha mandado "presente".
 - job_progress (15:00): tareas que vencen hoy o ya vencieron y no tienen foto de hoy.
 - daily_summary (18:00): resumen del día al WhatsApp del dueño.
+- location_purge (03:30): borra las coordenadas de más de LOCATION_RETENTION_DAYS;
+  en asistencia solo queda el resultado (en obra / a X km).
 
 A los trabajadores se les escribe sin plantilla si su ventana de 24 h está
 abierta (ver notify.py); la plantilla solo hace falta para quien no ha
@@ -20,12 +22,13 @@ import uuid
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import Text, cast, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import AsyncSessionLocal
+from app.models.event import Event
 from app.models.notification import ScheduledRun
 from app.models.user import User
 from app.services import insights, notify
@@ -102,6 +105,22 @@ async def run_daily_summary(session: AsyncSession, company_id: uuid.UUID) -> int
     return sent
 
 
+async def run_location_purge(session: AsyncSession, company_id: uuid.UUID) -> int:
+    cutoff = local_now() - timedelta(days=settings.location_retention_days)
+    result = await session.execute(
+        update(Event)
+        .where(
+            Event.company_id == company_id,
+            Event.received_at < cutoff,
+            # Eventos viejos guardaban el lote completo: la ubicación puede estar en otro evento.
+            or_(Event.latitude.is_not(None), cast(Event.raw_payload, Text).contains('"latitude"')),
+        )
+        .values(latitude=None, longitude=None, raw_payload={"purged": "location"})
+    )
+    await session.commit()
+    return result.rowcount or 0
+
+
 Job = Callable[[AsyncSession, uuid.UUID], Awaitable[int]]
 
 
@@ -113,6 +132,7 @@ def _jobs() -> list[tuple[str, str, bool, Job]]:
         ("job_progress", settings.job_progress_time, settings.proactive_enabled, run_job_progress),
         # Al dueño: él casi nunca le escribe al bot, así que sin plantilla no hay resumen.
         ("daily_summary", settings.daily_summary_time, bool(settings.wa_template_daily_summary), run_daily_summary),
+        ("location_purge", settings.location_purge_time, True, run_location_purge),
     ]
 
 
@@ -121,7 +141,7 @@ def due_jobs(now: datetime) -> list[tuple[str, Job]]:
     for kind, hhmm, enabled, fn in _jobs():
         if not enabled:
             continue
-        if is_rest_day(now.date()):
+        if is_rest_day(now.date()) and kind != "location_purge":
             continue
         target = datetime.combine(now.date(), parse_hhmm(hhmm), tzinfo=TZ)
         if target <= now <= target + CATCH_UP_WINDOW:

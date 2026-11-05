@@ -38,6 +38,16 @@ async def verified_body(request: Request) -> bytes:
     return body
 
 
+def single_message_payload(payload: dict, entry: dict, change: dict, msg: dict) -> dict:
+    """El payload de Meta con un solo mensaje: misma forma, sin los demás del lote."""
+    value = {k: v for k, v in change.get("value", {}).items() if k not in ("messages", "statuses")}
+    value["messages"] = [msg]
+    return {
+        "object": payload.get("object"),
+        "entry": [{"id": entry.get("id"), "changes": [{"field": change.get("field"), "value": value}]}],
+    }
+
+
 @router.get("/whatsapp")
 async def verify_webhook(
     hub_mode: str = Query(alias="hub.mode"),
@@ -64,8 +74,9 @@ async def receive_message(
     company_id = uuid.UUID(settings.company_id)
 
     # Extraer mensajes del payload (puede ser solo un status update).
-    # Meta puede mandar varios mensajes en un POST; cada evento guarda el
-    # payload completo y el parser localiza su mensaje por whatsapp_message_id.
+    # Meta puede mandar varios mensajes en un POST; cada evento guarda solo el
+    # suyo, así borrar los datos de un mensaje (p. ej. una ubicación) no deja
+    # copias en el payload de los demás.
     messages_to_process: list[tuple[str, dict]] = []
     try:
         for entry in payload.get("entry", []):
@@ -74,7 +85,7 @@ async def receive_message(
                 for msg in value.get("messages", []):
                     wa_msg_id = msg.get("id")
                     if wa_msg_id:
-                        messages_to_process.append((wa_msg_id, payload))
+                        messages_to_process.append((wa_msg_id, single_message_payload(payload, entry, change, msg)))
     except Exception as e:
         logger.warning("Error parsing webhook payload: %s", e)
         return {"status": "ok"}

@@ -1,3 +1,5 @@
+import type { DuplicateOf } from '../api/client'
+
 const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
@@ -76,4 +78,10 @@ export const EVENT_LABEL: Record<string, string> = {
 
 export function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`
+}
+
+/** La foto anterior de una foto repetida, para mostrarlas lado a lado en el lightbox. */
+export function compareWith(dup: DuplicateOf | null | undefined): { url: string; caption: string } | undefined {
+  if (!dup?.url) return undefined
+  return { url: dup.url, caption: `Anterior · ${dup.worker_name ?? 'otro trabajador'} · ${fmtCuando(dup.received_at)}` }
 }

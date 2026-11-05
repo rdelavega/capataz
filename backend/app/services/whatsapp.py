@@ -72,6 +72,31 @@ async def send_interactive_list(to: str, body_text: str, button_label: str, rows
         resp.raise_for_status()
 
 
+async def send_location_request(to: str, body_text: str) -> None:
+    """Mensaje con botón "Enviar ubicación": un toque y comparte dónde está."""
+    headers = {
+        "Authorization": f"Bearer {settings.whatsapp_token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "location_request_message",
+            "body": {"text": body_text},
+            "action": {"name": "send_location"},
+        },
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{GRAPH_API_BASE}/{settings.whatsapp_phone_number_id}/messages",
+            headers=headers,
+            json=payload,
+        )
+        resp.raise_for_status()
+
+
 async def send_text_message(to: str, body: str) -> None:
     """Envía un mensaje de texto al trabajador. Requiere que el worker haya escrito primero."""
     headers = {

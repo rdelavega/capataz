@@ -25,6 +25,9 @@ CREATE TABLE branches (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id  UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,
+    latitude    DOUBLE PRECISION,      -- ubicación de la obra (geocerca del check-in)
+    longitude   DOUBLE PRECISION,
+    geofence_m  INTEGER,               -- radio propio; NULL = GEOFENCE_METERS
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -49,6 +52,7 @@ CREATE TABLE workers (
     phone_number TEXT NOT NULL,           -- E.164, e.g. +5215512345678
     title        TEXT,                    -- puesto (Albañil, Electricista…)
     crew_id      UUID REFERENCES crews(id) ON DELETE SET NULL,
+    location_notice_at TIMESTAMPTZ,       -- cuándo se le explicó el uso de su ubicación
     active       BOOLEAN NOT NULL DEFAULT TRUE,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (company_id, phone_number)
@@ -88,7 +92,9 @@ CREATE TABLE events (
     media_url            TEXT,                   -- URL en R2
     transcription        TEXT,                   -- audio → texto (Whisper)
     latitude             DOUBLE PRECISION,
-    longitude            DOUBLE PRECISION,
+    longitude            DOUBLE PRECISION,       -- se borran a los LOCATION_RETENTION_DAYS
+    photo_hash           TEXT,                   -- dHash de la foto (fotos repetidas)
+    duplicate_of_id      UUID REFERENCES events(id) ON DELETE SET NULL,
     received_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -108,6 +114,11 @@ CREATE TABLE attendance_daily (
     status       attendance_status NOT NULL DEFAULT 'presente',
     checkin_at   TIMESTAMPTZ,
     event_id     UUID REFERENCES events(id) ON DELETE SET NULL,
+    -- Verificación de presencia: solo el resultado, sin coordenadas.
+    location_status     TEXT,         -- en_sitio · lejos · sin_referencia · NULL (no la mandó)
+    location_distance_m INTEGER,
+    location_branch_id  UUID REFERENCES branches(id) ON DELETE SET NULL,
+    location_at         TIMESTAMPTZ,
     UNIQUE (worker_id, work_date)
 );
 

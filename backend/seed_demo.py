@@ -8,6 +8,10 @@ transcrito. Además arma 30 días de historial (asistencia y tareas cerradas con
 foto) para que las métricas, el calendario y la ficha no salgan vacíos. Si pasas --mi-numero, ese trabajador es el que falta: mandas
 "presente" en vivo durante la demo y el tablero cambia frente al cliente.
 
+Verificación de presencia: las obras tienen ubicación, casi todos checaron "en
+obra", uno checó a 2.4 km y otro sin mandar ubicación. Con --fotos, una foto de
+hoy es copia de una de días pasados y sale como "repetida".
+
 BORRA sucursales, trabajadores, tareas y eventos de la empresa configurada en
 COMPANY_ID antes de crear los nuevos.
 
@@ -24,6 +28,7 @@ from pathlib import Path
 
 from sqlalchemy import delete
 
+from app import geo
 from app.config import settings
 from app.db import AsyncSessionLocal, engine
 from app.models import AttendanceDaily, Branch, Company, Crew, Event, Job, Notification, Worker
@@ -168,6 +173,13 @@ CHECKINS: list[tuple[int, str] | None] = [
 ]
 LATE_INDEX = 6
 MISSING_INDEX = 7
+FAR_INDEX = 2           # checó a ~2.4 km de su obra
+NO_LOCATION_INDEX = 5   # checó sin mandar ubicación
+DUPLICATE_PHOTO = 2     # esta foto de hoy es copia de una de días pasados
+
+# Dos puntos de Mérida (~7.6 km entre sí) para las obras de cualquier giro.
+BRANCH_COORDS = [(21.0190, -89.6237), (21.0449, -89.5555)]
+FAR_OFFSET = (0.0215, 0.0040)  # ~2.4 km al norte
 HISTORY_DAYS = 30
 
 # Tareas ya cerradas en semanas anteriores, por giro (alimentan métricas y fichas).
@@ -253,7 +265,10 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
             raise SystemExit(f"No existe la empresa {company_id}; corre seed.py primero")
         company.name = empresa
 
-        branches = [Branch(company_id=company_id, name=n) for n in data["branches"]]
+        branches = [
+            Branch(company_id=company_id, name=n, latitude=BRANCH_COORDS[i % 2][0], longitude=BRANCH_COORDS[i % 2][1])
+            for i, n in enumerate(data["branches"])
+        ]
         session.add_all(branches)
         await session.flush()
 
@@ -326,23 +341,45 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
             late_arrived |= is_late(at)
             e = event(workers[i], at, "checkin", text_content=text)
             await session.flush()
-            session.add(AttendanceDaily(
+            att = AttendanceDaily(
                 company_id=company_id, worker_id=workers[i].id, work_date=today,
                 status="tarde" if is_late(at) else "presente",
                 checkin_at=at, event_id=e.id,
-            ))
+            )
+            session.add(att)
+            if i == NO_LOCATION_INDEX:
+                continue
+            # Después del "presente", el botón de ubicación (igual que en el bot de verdad)
+            branch = next(b for b in branches if b.id == workers[i].branch_id)
+            lat, lng = branch.latitude, branch.longitude
+            if i == FAR_INDEX:
+                lat, lng = lat + FAR_OFFSET[0], lng + FAR_OFFSET[1]
+            else:
+                lat, lng = lat + 0.0003 * (i % 3), lng - 0.0002 * (i % 2)
+            loc_at = at + timedelta(minutes=1)
+            event(workers[i], loc_at, "location", latitude=lat, longitude=lng)
+            check = geo.check_location(lat, lng, branches, branch.id)
+            att.location_status, att.location_distance_m = check.status, check.distance_m
+            att.location_branch_id, att.location_at = check.branch_id, loc_at
 
+        today_photos: list[Event] = []
         for n, (w, j, caption) in enumerate(data["photos"]):
             media_url = None
             if n < len(photo_files):
                 f = photo_files[n]
                 key = f"media/{company_id}/demo-{giro}-{n}{f.suffix.lower()}"
                 media_url = storage.upload_to_r2(f.read_bytes(), key)
-            event(workers[w], clock.activity(time(9 + n, 20)), "photo",
-                  job_id=jobs[j].id, text_content=caption, media_url=media_url)
+            today_photos.append(event(workers[w], clock.activity(time(9 + n, 20)), "photo",
+                                      job_id=jobs[j].id, text_content=caption, media_url=media_url))
 
-        await _seed_history(session, company_id, giro, workers, crew_of, today,
-                            [e.media_url for e in session.new if isinstance(e, Event) and e.media_url])
+        history_photos = await _seed_history(session, company_id, giro, workers, crew_of, today,
+                                             [p.media_url for p in today_photos if p.media_url])
+
+        # Una foto de hoy que es la misma que una de hace días: sale como "repetida".
+        dup = today_photos[DUPLICATE_PHOTO] if DUPLICATE_PHOTO < len(today_photos) else None
+        original = next((h for h in history_photos if dup and dup.media_url and h.media_url == dup.media_url), None)
+        if dup and original:
+            dup.duplicate_of_id = original.id
 
         # El bot ya le preguntó al que falta (se ve en "Necesita tu atención")
         reminder_at = datetime.combine(today, time(8, 30), tzinfo=TZ)
@@ -369,13 +406,17 @@ async def seed_demo(giro: str, empresa: str, mi_numero: str | None, fotos: Path 
     print(f"  {len(workers)} trabajadores · {len(crew_of and set(crew_of.values()))} cuadrillas · {len(jobs)} trabajos · "
           + (f"{workers[LATE_INDEX].name} llegó tarde · " if late_arrived else "nadie ha llegado tarde aún · ")
           + f"{missing.name} no ha llegado")
+    print(f"  {workers[FAR_INDEX].name} checó a 2.4 km de su obra · "
+          f"{workers[NO_LOCATION_INDEX].name} checó sin ubicación"
+          + (" · hay una foto repetida" if dup and original else ""))
     if mi_numero:
         print(f"  {missing.name} eres tú ({missing.phone_number}): manda \"presente\" en la demo.")
 
 
 async def _seed_history(session, company_id: uuid.UUID, giro: str, workers: list[Worker],
-                        crew_of: dict[int, Crew], today, photo_urls: list[str]) -> None:
+                        crew_of: dict[int, Crew], today, photo_urls: list[str]) -> list[Event]:
     """30 días hacia atrás: asistencia con patrones creíbles y tareas cerradas con foto."""
+    photos: list[Event] = []
     for back in range(1, HISTORY_DAYS):
         d = today - timedelta(days=back)
         if is_rest_day(d):
@@ -416,13 +457,17 @@ async def _seed_history(session, company_id: uuid.UUID, giro: str, workers: list
         session.add(job)
         await session.flush()
         if n % 5 != 4:  # casi todas cerradas con foto
-            session.add(Event(
+            photo = Event(
                 company_id=company_id, worker_id=w.id, job_id=job.id,
                 whatsapp_message_id=f"demo-{uuid.uuid4()}", raw_payload={"demo": True},
                 event_type="photo", received_at=closed - timedelta(hours=1),
                 media_url=photo_urls[n % len(photo_urls)] if photo_urls else None,
                 text_content="Así quedó",
-            ))
+            )
+            session.add(photo)
+            photos.append(photo)
+    await session.flush()
+    return photos
 
 
 def main() -> None:

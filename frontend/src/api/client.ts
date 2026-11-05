@@ -72,7 +72,8 @@ export type Severity = 'urgent' | 'review' | 'warn'
 export interface AttentionItem {
   id: string
   severity: Severity
-  kind: 'no_llego' | 'ausente' | 'tarea_atrasada' | 'vence_hoy' | 'por_revisar' | 'tarde_repetido' | 'obra_sin_fotos'
+  kind: 'no_llego' | 'ausente' | 'tarea_atrasada' | 'vence_hoy' | 'por_revisar' | 'tarde_repetido'
+    | 'obra_sin_fotos' | 'lejos_de_obra' | 'foto_repetida'
   title: string
   detail: string
   action: 'whatsapp' | 'review' | 'worker' | 'tasks' | 'none'
@@ -143,8 +144,9 @@ export interface EventLog {
   text_content: string | null
   media_url: string | null
   transcription: string | null
-  latitude: number | null
-  longitude: number | null
+  /** 'En Obra Norte' / 'A 2.3 km de Obra Norte'. Las coordenadas no salen del servidor. */
+  location_label: string | null
+  duplicate_of: DuplicateOf | null
 }
 
 export interface EventsResponse {
@@ -158,6 +160,22 @@ export const fetchEvents = (date?: string) =>
 // ─── Equipo ──────────────────────────────────────────────────────────────────
 
 export type AttendanceStatus = 'presente' | 'ausente' | 'tarde'
+
+/** Resultado de comparar la ubicación del check-in con la obra. */
+export interface CheckinLocation {
+  status: 'en_sitio' | 'lejos' | 'sin_referencia' | 'sin_ubicacion'
+  label: string
+  distance_m: number | null
+  branch_name: string | null
+}
+
+/** La foto anterior de la que esta parece copia. */
+export interface DuplicateOf {
+  id: string
+  url: string | null
+  received_at: string
+  worker_name: string | null
+}
 /** p a tiempo · t tarde · f faltó · d descanso · n hoy sin reporte · - aún no trabajaba */
 export type DayCode = 'p' | 't' | 'f' | 'd' | 'n' | '-'
 
@@ -174,6 +192,7 @@ export interface WorkerDetail {
   is_lead: boolean
   today_status: AttendanceStatus | null
   checkin_at: string | null
+  location: CheckinLocation | null
   last_event: LastEvent | null
   active_jobs: number
   overdue_jobs: number
@@ -208,6 +227,7 @@ export interface JobCardData {
   /** Cuándo el encargado apretó "Enterado" en el aviso de WhatsApp. */
   acknowledged_at: string | null
   photo_count: number
+  duplicate_photos: number
   last_photo_at: string | null
   bot_asked_at: string | null
 }
@@ -218,6 +238,7 @@ export interface PhotoData {
   received_at: string
   caption: string | null
   job_title?: string | null
+  duplicate_of: DuplicateOf | null
 }
 
 export interface WorkerSummary {
@@ -242,6 +263,7 @@ export interface WorkerSummary {
     text: string | null
     media_url: string | null
     job_title: string | null
+    duplicate_of: DuplicateOf | null
   }[]
   jobs: JobCardData[]
   photos: PhotoData[]
@@ -256,6 +278,9 @@ export const fetchWorkerSummary = (id: string) =>
 export interface BranchOption {
   id: string
   name: string
+  has_location: boolean
+  maps_url: string | null
+  geofence_m: number
 }
 
 export interface BranchesResponse {
@@ -273,11 +298,15 @@ export interface WorkerCreate {
 export const fetchBranches = () =>
   apiFetch<BranchesResponse>('/workers/branches')
 
-export const createBranch = (name: string) =>
-  apiFetch<{ id: string; name: string }>('/workers/branches', {
+/** location: link de Google Maps o "lat, lng". */
+export const createBranch = (name: string, location?: string) =>
+  apiFetch<BranchOption>('/workers/branches', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, location: location || undefined }),
   })
+
+export const updateBranch = (id: string, data: { name?: string; location?: string | null; geofence_m?: number | null }) =>
+  apiFetch<BranchOption>(`/workers/branches/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
 
 export const createWorker = (data: WorkerCreate) =>
   apiFetch<{ id: string; name: string }>('/workers', {

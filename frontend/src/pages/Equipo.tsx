@@ -1,10 +1,10 @@
-import { ChevronRight, RefreshCw, Search, X } from 'lucide-react'
+import { ChevronRight, MapPin, MapPinOff, RefreshCw, Search, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { BranchOption, CrewData, WorkerDetail, WorkersResponse } from '../api/client'
-import { createBranch, createWorker, fetchBranches, fetchCrews, fetchWorkers } from '../api/client'
+import { createBranch, createWorker, fetchBranches, fetchCrews, fetchWorkers, updateBranch } from '../api/client'
 import { CrewsBoard } from '../components/Crews'
 import { AttendanceStrip } from '../components/Attendance'
-import { TodayStatus } from '../components/TodayStatus'
+import { LocationChip, TodayStatus } from '../components/TodayStatus'
 import { useWorkerDrawer } from '../components/WorkerDrawer'
 import { EVENT_LABEL, fmtHace, initials } from '../lib/format'
 
@@ -119,8 +119,13 @@ function AddWorkerModal({ branches, crews, onClose, onSaved }: AddWorkerModalPro
 
 // ─── Modal: Agregar sucursal ──────────────────────────────────────────────────
 
+const LOCATION_HELP =
+  'En Google Maps busca la obra (o deja presionado el punto exacto), toca Compartir y pega aquí el link. ' +
+  'También sirven coordenadas: 21.0190, -89.6237.'
+
 function AddBranchModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [name, setName]   = useState('')
+  const [location, setLocation] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState<string | null>(null)
 
@@ -129,7 +134,7 @@ function AddBranchModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     setSaving(true)
     setError(null)
     try {
-      await createBranch(name.trim())
+      await createBranch(name.trim(), location.trim())
       onSaved()
       onClose()
     } catch (err) {
@@ -160,6 +165,13 @@ function AddBranchModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
               autoFocus
               className="mono w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
           </div>
+          <div>
+            <label className="label mb-1 block text-[#58423B]" htmlFor="branch-location">Ubicación (para verificar llegadas)</label>
+            <input id="branch-location" value={location} onChange={e => setLocation(e.target.value)}
+              placeholder="https://maps.app.goo.gl/…"
+              className="mono w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
+            <p className="mono mt-1 text-[11px] text-[#8C7169]">{LOCATION_HELP} Puedes dejarlo para después.</p>
+          </div>
           {error && <p className="mono text-sm text-[#A32D2D]">Error — {error}</p>}
           <div className="flex justify-end gap-3 border-t-2 border-[#E0C0B6] pt-4">
             <button type="button" onClick={onClose}
@@ -169,6 +181,98 @@ function AddBranchModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
             <button type="submit" disabled={saving}
               className="label border-2 border-[#2A2622] bg-[#D85A30] px-4 py-2 text-white shadow-[3px_3px_0_0_#2A2622] hover:bg-[#A5360D] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-40 transition-all">
               {saving ? 'Guardando...' : '+ Crear'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal: Ubicación de la obra ──────────────────────────────────────────────
+
+function BranchLocationModal({ branch, onClose, onSaved }: { branch: BranchOption; onClose: () => void; onSaved: () => void }) {
+  const [location, setLocation] = useState('')
+  const [radius, setRadius]     = useState(String(branch.geofence_m))
+  const [saving, setSaving]     = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+
+  async function save(data: Parameters<typeof updateBranch>[1]) {
+    setSaving(true)
+    setError(null)
+    try {
+      await updateBranch(branch.id, data)
+      onSaved()
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const geofence_m = Number(radius) || null
+    save(location.trim() ? { location: location.trim(), geofence_m } : { geofence_m })
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#2A2622]/60"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="w-full max-w-md mx-4 border-2 border-[#2A2622] bg-[#FFF8F3] shadow-[6px_6px_0_0_#2A2622]">
+        <div className="flex items-center justify-between border-b-2 border-[#2A2622] bg-[#ECE1D3] px-6 py-4">
+          <h2 className="hl-sm text-[#2A2622]">Ubicación de {branch.name}</h2>
+          <button
+            onClick={onClose}
+            className="label flex h-7 w-7 items-center justify-center border-2 border-[#2A2622] text-[#58423B] hover:bg-[#2A2622] hover:text-white transition-colors"
+            aria-label="Cerrar"
+          ><X size={14} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          <p className="mono text-xs text-[#58423B]">
+            Cuando alguien manda "presente", el bot le pide su ubicación y la compara con esta.
+            Si checa a más de {radius || branch.geofence_m} m, te sale aviso. Solo se guarda la distancia, nunca dónde estaba.
+          </p>
+          {branch.has_location && branch.maps_url && (
+            <p className="mono text-xs">
+              Ubicación actual:{' '}
+              <a href={branch.maps_url} target="_blank" rel="noreferrer" className="text-[#D85A30] underline underline-offset-2">ver en el mapa ↗</a>
+            </p>
+          )}
+          <div>
+            <label className="label mb-1 block text-[#58423B]" htmlFor="loc-link">
+              {branch.has_location ? 'Cambiar por' : 'Link de Google Maps o coordenadas'}
+            </label>
+            <input id="loc-link" value={location} onChange={e => setLocation(e.target.value)} autoFocus
+              required={!branch.has_location}
+              placeholder="https://maps.app.goo.gl/…"
+              className="mono w-full border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
+            <p className="mono mt-1 text-[11px] text-[#8C7169]">{LOCATION_HELP}</p>
+          </div>
+          <div>
+            <label className="label mb-1 block text-[#58423B]" htmlFor="loc-radius">Radio (metros)</label>
+            <input id="loc-radius" type="number" min={50} max={5000} step={50} value={radius} onChange={e => setRadius(e.target.value)}
+              className="mono w-32 border-2 border-[#2A2622] bg-white px-3 py-2 text-[#2A2622] outline-none focus:border-[#D85A30]" />
+            <p className="mono mt-1 text-[11px] text-[#8C7169]">Súbelo si la obra es grande o el GPS falla seguido ahí.</p>
+          </div>
+          {error && <p className="mono text-sm text-[#A32D2D]">Error — {error}</p>}
+          <div className="flex flex-wrap justify-end gap-3 border-t-2 border-[#E0C0B6] pt-4">
+            {branch.has_location && (
+              <button type="button" disabled={saving} onClick={() => save({ location: null })}
+                className="label mr-auto border-2 border-[#A32D2D] px-4 py-2 text-[#A32D2D] hover:bg-[#A32D2D] hover:text-white disabled:opacity-40 transition-colors">
+                Quitar ubicación
+              </button>
+            )}
+            <button type="button" onClick={onClose}
+              className="label border-2 border-[#2A2622] px-4 py-2 text-[#58423B] hover:bg-[#ECE1D3] transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving}
+              className="label border-2 border-[#2A2622] bg-[#D85A30] px-4 py-2 text-white shadow-[3px_3px_0_0_#2A2622] hover:bg-[#A5360D] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-40 transition-all">
+              {saving ? 'Guardando...' : 'Guardar'}
             </button>
           </div>
         </form>
@@ -213,7 +317,14 @@ function WorkerRow({ w, onOpen }: { w: WorkerDetail; onOpen: () => void }) {
           </div>
         </div>
       </td>
-      <td className="px-3 py-2">{w.active ? <TodayStatus status={w.today_status} checkinAt={w.checkin_at} /> : <span className="chip chip-gray">Baja</span>}</td>
+      <td className="px-3 py-2">
+        {w.active ? (
+          <div className="flex flex-wrap gap-1">
+            <TodayStatus status={w.today_status} checkinAt={w.checkin_at} />
+            <LocationChip location={w.location} />
+          </div>
+        ) : <span className="chip chip-gray">Baja</span>}
+      </td>
       <td className="mono hidden px-3 py-2 text-xs xl:table-cell">
         {w.crew_name ?? <span className="text-[#8C7169]">—</span>}
         {w.is_lead && <span className="chip chip-orange ml-1.5">Enc.</span>}
@@ -231,6 +342,21 @@ function WorkerRow({ w, onOpen }: { w: WorkerDetail; onOpen: () => void }) {
       </td>
       <td className="px-2 text-[#8C7169]"><ChevronRight size={16} aria-hidden="true" /></td>
     </tr>
+  )
+}
+
+function BranchLocationButton({ branch, onClick }: { branch?: BranchOption; onClick: (b: BranchOption) => void }) {
+  if (!branch) return null
+  return branch.has_location ? (
+    <button onClick={() => onClick(branch)} className="mono ml-auto inline-flex items-center gap-1 text-[11px] text-[#58423B] hover:text-[#D85A30]"
+      title="Los check-ins se comparan con esta ubicación">
+      <MapPin size={12} aria-hidden="true" /> Ubicación fijada · cambiar
+    </button>
+  ) : (
+    <button onClick={() => onClick(branch)} className="mono ml-auto inline-flex items-center gap-1 text-[11px] font-bold text-[#A5360D] underline underline-offset-2 hover:text-[#D85A30]"
+      title="Sin ubicación no se puede verificar que lleguen a la obra">
+      <MapPinOff size={12} aria-hidden="true" /> Fijar ubicación de la obra
+    </button>
   )
 }
 
@@ -256,6 +382,7 @@ export function Equipo() {
   const [branches, setBranches]               = useState<BranchOption[]>([])
   const [crews, setCrews]                     = useState<CrewData[]>([])
   const [tab, setTab]                         = useState<'personas' | 'cuadrillas'>('personas')
+  const [locating, setLocating]               = useState<BranchOption | null>(null)
   const { openWorker, version, bump } = useWorkerDrawer()
 
   const load = useCallback(async () => {
@@ -411,8 +538,11 @@ export function Equipo() {
                 <tbody key={name}>
                   <tr className="border-y-2 border-[#2A2622] bg-[#E5DFD3]">
                     <td colSpan={9} className="px-3 py-1.5">
-                      <span className="font-headline text-sm font-semibold uppercase tracking-wide">{name}</span>
-                      <span className="mono ml-3 text-[11px] text-[#58423B]">{groupSummary(ws)}</span>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className="font-headline text-sm font-semibold uppercase tracking-wide">{name}</span>
+                        <span className="mono text-[11px] text-[#58423B]">{groupSummary(ws)}</span>
+                        <BranchLocationButton branch={branches.find(b => b.name === name)} onClick={setLocating} />
+                      </div>
                     </td>
                   </tr>
                   {ws.map(w => <WorkerRow key={w.id} w={w} onOpen={() => openWorker(w.id)} />)}
@@ -426,6 +556,9 @@ export function Equipo() {
 
       {showModal && branches.length > 0 && (
         <AddWorkerModal branches={branches} crews={crews} onClose={() => setShowModal(false)} onSaved={load} />
+      )}
+      {locating && (
+        <BranchLocationModal branch={locating} onClose={() => setLocating(null)} onSaved={load} />
       )}
       {showBranchModal && (
         <AddBranchModal onClose={() => setShowBranchModal(false)} onSaved={() => { setBranches([]); load() }} />

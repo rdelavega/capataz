@@ -23,6 +23,8 @@ from app.models.event import Event
 from app.models.job import Job
 from app.models.notification import Notification
 from app.models.worker import Worker
+from app.geo import fmt_distance
+from app.services import photos as photo_svc
 from app.timeutil import (
     TZ, fmt_cuando, fmt_dia, fmt_hora, is_rest_day, late_cutoff, local_date, local_now, to_local,
 )
@@ -90,6 +92,8 @@ class Snapshot:
     last_event: dict[uuid.UUID, Event]
     crews: dict[uuid.UUID, Crew] = field(default_factory=dict)
     reminders_today: dict[tuple[str, uuid.UUID | None], datetime] = field(default_factory=dict)
+    # Foto original de cada foto repetida (por id de la original).
+    originals: dict[uuid.UUID, dict] = field(default_factory=dict)
 
     def worker_start(self, w: Worker) -> date:
         return to_local(w.created_at).date() if w.created_at else self.today - timedelta(days=365)
@@ -177,6 +181,10 @@ async def load_snapshot(session: AsyncSession, company_id: uuid.UUID) -> Snapsho
     )).scalars():
         last_event[e.worker_id] = e
 
+    originals = await photo_svc.load_originals(
+        session, [*events_today, *(p for ps in photos_by_job.values() for p in ps)]
+    )
+
     reminders: dict[tuple[str, uuid.UUID | None], datetime] = {}
     for n in (await session.execute(
         select(Notification).where(
@@ -190,7 +198,7 @@ async def load_snapshot(session: AsyncSession, company_id: uuid.UUID) -> Snapsho
     return Snapshot(
         today=today, now=now, branches=branches, workers=workers, attendance=attendance,
         jobs=jobs, photos_by_job=photos_by_job, events_today=events_today,
-        last_event=last_event, crews=crews, reminders_today=reminders,
+        last_event=last_event, crews=crews, reminders_today=reminders, originals=originals,
     )
 
 
@@ -293,7 +301,41 @@ def attention_items(s: Snapshot) -> list[dict]:
                 "action": "worker",
             })
 
-    # 5. Obra con gente pero sin fotos
+    # 5. Checó lejos de la obra. Solo distancia: nunca dónde estaba.
+    for w in s.workers:
+        rec = s.attendance.get(w.id, {}).get(s.today)
+        if rec and rec.location_status == "lejos" and rec.status in ("presente", "tarde"):
+            obra = branch_name(rec.location_branch_id) if rec.location_branch_id else "su obra"
+            items.append({
+                "id": f"lejos:{w.id}", "severity": "warn", "kind": "lejos_de_obra",
+                "title": f"{w.name} checó a {fmt_distance(rec.location_distance_m or 0)} de {obra}",
+                "detail": f"Llegó {fmt_hora(rec.checkin_at)} · puede que lo hayan mandado a otro lado"
+                          if rec.checkin_at else "Puede que lo hayan mandado a otro lado",
+                "worker_id": str(w.id), "worker_name": w.name, "phone_number": w.phone_number,
+                "action": "worker",
+            })
+
+    # 6. Fotos repetidas hoy (una por trabajador)
+    flagged: set[uuid.UUID] = set()
+    for e in s.events_today:
+        if e.event_type != "photo" or not e.duplicate_of_id or e.worker_id in flagged:
+            continue
+        w = s.worker(e.worker_id)
+        orig = s.originals.get(e.duplicate_of_id)
+        if not w or not orig:
+            continue
+        flagged.add(w.id)
+        de_quien = "suya" if orig["worker_name"] == w.name else f"de {orig['worker_name'] or 'otro trabajador'}"
+        cuando = fmt_cuando(datetime.fromisoformat(orig["received_at"]), s.today)
+        items.append({
+            "id": f"foto_repetida:{e.id}", "severity": "warn", "kind": "foto_repetida",
+            "title": f"{w.name} mandó una foto que parece repetida",
+            "detail": f"Igual a una foto {de_quien} ({cuando}) · compáralas en su ficha",
+            "worker_id": str(w.id), "worker_name": w.name, "phone_number": w.phone_number,
+            "action": "worker",
+        })
+
+    # 7. Obra con gente pero sin fotos
     if s.now.time() >= NO_PHOTOS_AFTER and not is_rest_day(s.today):
         present_by_branch: dict[uuid.UUID, int] = defaultdict(int)
         for w in s.workers:
@@ -482,6 +524,7 @@ def worker_row(s: Snapshot, w: Worker) -> dict:
         "is_lead": bool(crew and crew.lead_worker_id == w.id),
         "today_status": rec.status if rec else None,
         "checkin_at": rec.checkin_at.isoformat() if rec and rec.checkin_at else None,
+        "location": location_info(s, rec),
         "last_event": {"type": last.event_type, "received_at": last.received_at.isoformat()} if last else None,
         "active_jobs": sum(j.status in (*OPEN_STATUSES, "por_revisar") for j in wjobs),
         "overdue_jobs": sum(job_is_overdue(j, s.today) for j in wjobs),
@@ -491,8 +534,24 @@ def worker_row(s: Snapshot, w: Worker) -> dict:
     }
 
 
+def location_info(s: Snapshot, rec: AttendanceDaily | None) -> dict | None:
+    """Resultado de la verificación del check-in de hoy. Nunca incluye coordenadas."""
+    if rec is None or rec.status not in ("presente", "tarde"):
+        return None
+    status = rec.location_status or "sin_ubicacion"
+    obra = s.branches[rec.location_branch_id].name if rec.location_branch_id in s.branches else None
+    label = {
+        "en_sitio": f"En {obra}" if obra else "En obra",
+        "lejos": f"A {fmt_distance(rec.location_distance_m or 0)}" + (f" de {obra}" if obra else ""),
+        "sin_referencia": "Ubicación sin comparar",
+        "sin_ubicacion": "Sin ubicación",
+    }[status]
+    return {"status": status, "label": label, "distance_m": rec.location_distance_m, "branch_name": obra}
+
+
 def worker_summary(s: Snapshot, w: Worker, events_today: list[Event], photos: list[Event],
-                   photo_total: int) -> dict:
+                   photo_total: int, originals: dict[uuid.UUID, dict] | None = None) -> dict:
+    originals = {**s.originals, **(originals or {})}
     days = _date_range(s.today, HISTORY_DAYS)
     codes = s.codes(w, days)
     recs = s.attendance.get(w.id, {})
@@ -514,6 +573,7 @@ def worker_summary(s: Snapshot, w: Worker, events_today: list[Event], photos: li
             "id": str(e.id), "type": e.event_type, "received_at": e.received_at.isoformat(),
             "text": e.transcription or e.text_content, "media_url": e.media_url,
             "job_title": job.title if job else None,
+            "duplicate_of": originals.get(e.duplicate_of_id) if e.duplicate_of_id else None,
         })
 
     return {
@@ -533,9 +593,7 @@ def worker_summary(s: Snapshot, w: Worker, events_today: list[Event], photos: li
         "today": timeline,
         "jobs": [job_card(s, j) for j in active_jobs],
         "photos": [
-            {"id": str(p.id), "url": p.media_url, "received_at": p.received_at.isoformat(),
-             "caption": p.text_content,
-             "job_title": jobs_by_id[p.job_id].title if p.job_id in jobs_by_id else None}
+            photo_svc.photo_dict(p, originals, job_title=jobs_by_id[p.job_id].title if p.job_id in jobs_by_id else None)
             for p in photos
         ],
         "photo_total": photo_total,
@@ -560,6 +618,7 @@ def job_card(s: Snapshot, j: Job) -> dict:
         "completed_at": j.completed_at.isoformat() if j.completed_at else None,
         "acknowledged_at": j.acknowledged_at.isoformat() if j.acknowledged_at else None,
         "photo_count": len(photos),
+        "duplicate_photos": sum(1 for p in photos if p.duplicate_of_id),
         "last_photo_at": photos[-1].received_at.isoformat() if photos else None,
         "bot_asked_at": asked.isoformat() if asked else None,
     }

@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import geo
 from app.config import settings
 from app.db import get_db
 from app.models.branch import Branch
@@ -14,6 +15,7 @@ from app.models.event import Event
 from app.models.worker import Worker
 from app.phone import normalize_phone
 from app.services import insights, notify
+from app.services import photos as photo_svc
 from app.timeutil import local_date
 
 router = APIRouter(prefix="/workers", tags=["workers"])
@@ -41,6 +43,38 @@ class CrewIn(BaseModel):
 
 class BranchCreate(BaseModel):
     name: str
+    # Link de Google Maps (largo o corto) o "lat, lng". Opcional.
+    location: str | None = None
+
+
+class BranchUpdate(BaseModel):
+    name: str | None = None
+    location: str | None = None
+    geofence_m: int | None = None
+
+
+def _branch_dict(b: Branch) -> dict:
+    has_location = b.latitude is not None and b.longitude is not None
+    return {
+        "id": str(b.id), "name": b.name, "has_location": has_location,
+        "maps_url": f"https://www.google.com/maps?q={b.latitude},{b.longitude}" if has_location else None,
+        "geofence_m": b.geofence_m or settings.geofence_meters,
+    }
+
+
+async def _set_location(branch: Branch, text: str | None) -> None:
+    """Vacío borra la ubicación; un link o coordenadas que no se entienden es error."""
+    if not text or not text.strip():
+        branch.latitude = branch.longitude = None
+        return
+    found = await geo.resolve_location(text)
+    if found is None:
+        raise HTTPException(
+            status_code=422,
+            detail="No encontré la ubicación en ese link. Abre la obra en Google Maps, "
+                   "toca Compartir y pega el link, o escribe las coordenadas (21.0190, -89.6237).",
+        )
+    branch.latitude, branch.longitude = found
 
 
 @router.get("/branches")
@@ -52,7 +86,7 @@ async def list_branches(session: AsyncSession = Depends(get_db)) -> dict:
         .order_by(Branch.name)
     )
     branches = result.scalars().all()
-    return {"branches": [{"id": str(b.id), "name": b.name} for b in branches]}
+    return {"branches": [_branch_dict(b) for b in branches]}
 
 
 @router.post("/branches", status_code=201)
@@ -62,10 +96,36 @@ async def create_branch(
 ) -> dict:
     company_id = uuid.UUID(settings.company_id)
     branch = Branch(company_id=company_id, name=body.name.strip())
+    if body.location:
+        await _set_location(branch, body.location)
     session.add(branch)
     await session.commit()
     await session.refresh(branch)
-    return {"id": str(branch.id), "name": branch.name}
+    return _branch_dict(branch)
+
+
+@router.patch("/branches/{branch_id}", status_code=200)
+async def update_branch(
+    branch_id: uuid.UUID,
+    body: BranchUpdate,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    branch = (await session.execute(
+        select(Branch).where(Branch.id == branch_id, Branch.company_id == uuid.UUID(settings.company_id))
+    )).scalar_one_or_none()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Sucursal no encontrada")
+    updates = body.model_dump(exclude_unset=True)
+    if "name" in updates and (body.name or "").strip():
+        branch.name = body.name.strip()
+    if "location" in updates:
+        await _set_location(branch, body.location)
+    if "geofence_m" in updates:
+        if body.geofence_m is not None and not 50 <= body.geofence_m <= 5000:
+            raise HTTPException(status_code=422, detail="El radio debe estar entre 50 y 5,000 metros")
+        branch.geofence_m = body.geofence_m
+    await session.commit()
+    return _branch_dict(branch)
 
 
 # ─── Cuadrillas ───────────────────────────────────────────────────────────────
@@ -204,7 +264,8 @@ async def worker_summary(
     )).scalars())
     photo_total = (await session.execute(select(func.count(Event.id)).where(*photo_filter))).scalar_one()
 
-    return insights.worker_summary(s, worker, events_today, photos, photo_total)
+    originals = await photo_svc.load_originals(session, [*events_today, *photos])
+    return insights.worker_summary(s, worker, events_today, photos, photo_total, originals)
 
 
 @router.patch("/{worker_id}", status_code=200)

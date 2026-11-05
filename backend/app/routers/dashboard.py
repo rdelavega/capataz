@@ -6,12 +6,14 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import geo
 from app.config import settings
 from app.db import get_db
 from app.models.branch import Branch
 from app.models.event import Event
 from app.models.worker import Worker
 from app.services import insights
+from app.services import photos as photo_svc
 from app.timeutil import greeting, local_date, local_today
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -72,8 +74,25 @@ async def get_events(
         .order_by(Event.received_at.desc())
     )
 
+    rows = list(rows.tuples())
+    branches = (await session.execute(select(Branch).where(Branch.company_id == company_id))).scalars().all()
+    originals = await photo_svc.load_originals(session, [e for e, _, _ in rows])
+
+    def location_label(event: Event, worker: Worker | None) -> str | None:
+        """'En Obra Norte' / 'A 2.3 km de Obra Norte'. Las coordenadas no salen del servidor."""
+        if event.event_type != "location" and event.latitude is None:
+            return None
+        if event.latitude is None or event.longitude is None:
+            return "Ubicación (ya borrada)"
+        check = geo.check_location(event.latitude, event.longitude, branches, worker.branch_id if worker else None)
+        if check.status == "en_sitio":
+            return f"En {check.branch_name}"
+        if check.status == "lejos":
+            return f"A {geo.fmt_distance(check.distance_m)} de {check.branch_name}"
+        return "Ubicación recibida"
+
     events = []
-    for event, worker, branch in rows.tuples():
+    for event, worker, branch in rows:
         events.append({
             "id": str(event.id),
             "received_at": event.received_at.isoformat(),
@@ -84,8 +103,8 @@ async def get_events(
             "text_content": event.text_content,
             "media_url": event.media_url,
             "transcription": event.transcription,
-            "latitude": event.latitude,
-            "longitude": event.longitude,
+            "location_label": location_label(event, worker),
+            "duplicate_of": originals.get(event.duplicate_of_id) if event.duplicate_of_id else None,
         })
 
     return {"date": query_date.isoformat(), "events": events}
@@ -112,7 +131,7 @@ async def get_workers(session: AsyncSession = Depends(get_db)) -> dict:
             "branch_id": str(w.branch_id) if w.branch_id else None,
             "branch_name": b.name if b else None, "active": False,
             "crew_id": None, "crew_name": None, "is_lead": False,
-            "today_status": None, "checkin_at": None, "last_event": None,
+            "today_status": None, "checkin_at": None, "location": None, "last_event": None,
             "active_jobs": 0, "overdue_jobs": 0, "attendance_30d": [],
             "attendance_pct": None, "late_week": 0,
         })

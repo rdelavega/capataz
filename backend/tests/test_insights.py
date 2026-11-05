@@ -260,3 +260,41 @@ def test_aviso_de_trabajo_nuevo_sin_ventana_usa_plantilla(monkeypatch) -> None:
     _, name, params = sent["template"].await_args.args[:3]
     assert name == "capataz_trabajo_asignado"
     assert params == ["Jorge", "Fumigar casa García", "sin fecha", "sin detalles"]
+
+
+# ─── Verificación de presencia ────────────────────────────────────────────────
+
+def test_lejos_de_obra_es_pendiente_y_no_trae_coordenadas() -> None:
+    luis = _worker("Luis Pech")
+    att = _att(luis, TODAY, "presente")
+    att.location_status, att.location_distance_m, att.location_branch_id = "lejos", 2345, OBRA.id
+    s = _snap([luis], attendance=[att])
+    item = next(i for i in insights.attention_items(s) if i["kind"] == "lejos_de_obra")
+    assert item["title"] == "Luis Pech checó a 2.3 km de Altabrisa"
+    loc = insights.worker_row(s, luis)["location"]
+    assert loc == {"status": "lejos", "label": "A 2.3 km de Altabrisa", "distance_m": 2345, "branch_name": "Altabrisa"}
+
+
+def test_presente_sin_ubicacion() -> None:
+    luis = _worker("Luis Pech")
+    s = _snap([luis], attendance=[_att(luis, TODAY, "presente")])
+    assert insights.worker_row(s, luis)["location"]["label"] == "Sin ubicación"
+
+
+def test_foto_repetida_es_pendiente_con_la_original() -> None:
+    luis, raul = _worker("Luis Pech"), _worker("Raúl Dzib")
+    orig_id = uuid.uuid4()
+    foto = Event(id=uuid.uuid4(), worker_id=luis.id, event_type="photo", duplicate_of_id=orig_id,
+                 received_at=NOW, media_url="https://r2/b.jpg")
+    s = _snap([luis, raul], attendance=[_att(luis, TODAY, "presente")], events_today=[foto])
+    s.originals = {orig_id: {"id": str(orig_id), "url": "https://r2/a.jpg",
+                             "received_at": datetime(2026, 10, 30, 9, 20, tzinfo=TZ).isoformat(),
+                             "worker_name": "Raúl Dzib"}}
+    item = next(i for i in insights.attention_items(s) if i["kind"] == "foto_repetida")
+    assert item["worker_id"] == str(luis.id)
+    assert "de Raúl Dzib (vie 30 oct 9:20 am)" in item["detail"]
+
+
+def test_borrado_de_ubicaciones_corre_tambien_en_domingo() -> None:
+    domingo = datetime(2026, 11, 1, 3, 31, tzinfo=TZ)
+    assert [k for k, _ in scheduler.due_jobs(domingo)] == ["location_purge"]

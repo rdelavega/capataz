@@ -46,6 +46,16 @@ class Settings(BaseSettings):
     # Días de descanso (0=lunes … 6=domingo), separados por coma.
     rest_weekdays: str = "6"
 
+    # Verificación de presencia. Al checar, el bot pide la ubicación y la compara
+    # con la de la obra; las coordenadas se borran después de unos días y solo
+    # queda el resultado (en obra / a X km / sin ubicación).
+    checkin_ask_location: bool = True
+    geofence_meters: int = 300
+    location_retention_days: int = 90
+    location_purge_time: str = "03:30"
+    # Fotos casi idénticas a una anterior se marcan como repetidas.
+    duplicate_photo_days: int = 60
+
     # Mensajes proactivos (plantillas de WhatsApp aprobadas por Meta).
     # Si el nombre de una plantilla está vacío, ese envío automático no corre.
     scheduler_enabled: bool = True

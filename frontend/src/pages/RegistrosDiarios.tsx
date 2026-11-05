@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { EventLog, EventsResponse } from '../api/client'
 import { fetchEvents } from '../api/client'
 import { PhotoLightbox, type LightboxEntry } from '../components/PhotoLightbox'
+import { compareWith } from '../lib/format'
 
 const TYPE_LABEL: Record<string, string> = {
   checkin:  'Check-in',
@@ -46,8 +47,9 @@ function EventRow({ ev, onPhoto }: { ev: EventLog; onPhoto: (entry: LightboxEntr
       </td>
       <td className="px-4 py-3">
         {isPhoto ? (
+          <div className="flex items-center gap-2">
           <button
-            onClick={() => onPhoto({ url: ev.media_url!, title: ev.worker_name, subtitle: fmtTime(ev.received_at) })}
+            onClick={() => onPhoto({ url: ev.media_url!, title: ev.worker_name, subtitle: fmtTime(ev.received_at), compare: compareWith(ev.duplicate_of) })}
             className="group relative block"
             title="Ver foto"
           >
@@ -60,6 +62,10 @@ function EventRow({ ev, onPhoto }: { ev: EventLog; onPhoto: (entry: LightboxEntr
               <span className="opacity-0 group-hover:opacity-100 label text-white text-xs transition-opacity">Ver</span>
             </div>
           </button>
+          {ev.duplicate_of && (
+            <span className="chip chip-amber" title="Se ve igual a una foto anterior. Ábrela para compararlas.">Repetida</span>
+          )}
+          </div>
         ) : (
           <>
             {ev.media_url && (
@@ -75,12 +81,10 @@ function EventRow({ ev, onPhoto }: { ev: EventLog; onPhoto: (entry: LightboxEntr
             {content && (
               <p className="mono mt-0.5 truncate text-[#2A2622]">{content}</p>
             )}
-            {ev.latitude != null && ev.longitude != null && (
-              <p className="mono text-[#8C7169]">
-                {ev.latitude.toFixed(5)}, {ev.longitude.toFixed(5)}
-              </p>
+            {ev.location_label && (
+              <p className="mono text-[#58423B]">📍 {ev.location_label}</p>
             )}
-            {!ev.media_url && !content && ev.latitude == null && (
+            {!ev.media_url && !content && !ev.location_label && (
               <span className="mono text-[#8C7169]">—</span>
             )}
           </>

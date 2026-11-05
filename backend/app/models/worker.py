@@ -18,6 +18,8 @@ class Worker(Base):
     phone_number: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     crew_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("crews.id", ondelete="SET NULL"))
+    # Cuándo se le explicó para qué se usa su ubicación (se le dice una sola vez).
+    location_notice_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

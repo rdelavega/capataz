@@ -21,6 +21,11 @@ secundario en esta etapa.
       Giros: `construccion`, `taller`, `distribuidora`, `servicios`.
       Tu número queda como el trabajador que "no ha llegado" y como
       **encargado** de una cuadrilla (en construcción: "Cuadrilla Cholul").
+- [ ] **Recorrido de pruebas** completo (`docs/recorrido_pruebas.md`): cada
+      función con tu celular y el dashboard.
+- [ ] **Ubicación de tu obra** fijada en el lugar de la cita (Equipo → encabezado
+      de la obra → *Ubicación fijada · cambiar*), para que en vivo salgas
+      "En obra".
 - [ ] **Ensayo completo** (la sección 2 de principio a fin) con el celular y la
       laptop, cronometrado.
 - [ ] **Supabase despierto**: abrir el dashboard una vez (si estuvo inactivo
@@ -46,8 +51,13 @@ celular con WhatsApp.
 
 3. **El momento en vivo (3 min).**
    "Ese que no ha llegado soy yo. Mira." Manda **"presente"** desde tu celular.
-   El bot te contesta y en segundos el panel cambia (se actualiza solo).
+   El bot te contesta con el botón **Enviar ubicación**; tócalo. En segundos el
+   panel cambia (se actualiza solo) y sales **📍 En Obra …**.
    Mensaje clave: *el trabajador no instala nada; ya sabe usar WhatsApp.*
+   Cuando pregunte "¿y si manda presente desde su casa?": enséñale a Manuel
+   Chan, **⚠ A 2.4 km de la obra**, y la foto **Repetida** de Raúl Dzib lado a
+   lado. "No te digo que sea imposible hacer trampa; te digo que la ves."
+   Y que solo se guarda la distancia, nunca dónde estaba.
 
 4. **Trabajo de cuadrilla con prueba (4 min).**
    Primero **Equipo → Cuadrillas**: "Tú no le dices a cada quien qué hacer; le

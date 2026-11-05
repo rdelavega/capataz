@@ -134,6 +134,24 @@ WhatsApp (trabajador)
   `WA_TEMPLATE_JOB_ASSIGNED`; "Enterado" llena `jobs.acknowledged_at`.
 - **Hora de entrada**: `WORKDAY_START` (08:00) + `LATE_TOLERANCE_MINUTES`
   (10). Check-in después = `tarde`. `REST_WEEKDAYS` (domingo) no cuenta faltas.
+- **Verificación de presencia** (decisión 2026-11-04): al "presente" el bot
+  responde con el botón *Enviar ubicación* (`location_request_message`, sin
+  costo extra: va en la misma respuesta). Una ubicación sola también cuenta
+  como llegada. `app/geo.py` la compara con las obras (`branches.latitude/
+  longitude`, radio `GEOFENCE_METERS` o `branches.geofence_m`): en cualquier
+  obra = `en_sitio`; si no, `lejos` + distancia a su obra (la de su cuadrilla).
+  Reglas éticas, no negociables: **las coordenadas nunca salen del servidor**
+  (el panel ve "En Obra X" o "A 2.3 km", nunca un mapa de dónde estaba); se
+  borran a los `LOCATION_RETENTION_DAYS` (scheduler `location_purge`); solo
+  se pide al checar, no hay rastreo durante el día; la primera vez el bot le
+  explica al trabajador para qué es; las marcas son avisos, no castigos.
+- **Fotos repetidas**: dHash de 64 bits (`app/services/photos.py`), umbral
+  estricto (≤2 bits) y fotos lisas excluidas. Al trabajador no se le dice
+  nada; el dueño ve las dos fotos lado a lado ("puede ser el mismo ángulo,
+  tú decides"). Preferimos dejar pasar una a acusar a alguien por error.
+- **Cada evento guarda solo su mensaje** en `raw_payload`
+  (`single_message_payload`), para que borrar un dato no deje copias en
+  otros eventos del mismo lote.
 - **Escribirle a un trabajador desde el dashboard = link `wa.me`** desde el
   celular del dueño (gratis, siempre llega). Lo que manda el bot por API va con
   plantilla.
@@ -157,6 +175,7 @@ capataz/
 │   │   ├── dependencies.py       # get_current_user (JWT)
 │   │   ├── timeutil.py           # fechas en hora local
 │   │   ├── phone.py              # normalización de teléfonos MX
+│   │   ├── geo.py                # geocerca: distancia a la obra, links de Google Maps
 │   │   ├── migrations.py         # cambios de esquema idempotentes al arrancar
 │   │   ├── models/               # SQLAlchemy models
 │   │   ├── routers/
@@ -170,7 +189,8 @@ capataz/
 │   │       ├── parser.py         # clasifica eventos entrantes y contesta
 │   │       ├── insights.py       # pendientes, métricas, ficha (reglas del negocio)
 │   │       ├── notify.py         # mensajes proactivos (plantillas) + registro
-│   │       ├── scheduler.py      # recordatorios y resumen diario a su hora
+│   │       ├── scheduler.py      # recordatorios, resumen diario y borrado de ubicaciones
+│   │       ├── photos.py         # huella de fotos y detección de repetidas
 │   │       ├── storage.py        # subida a R2
 │   │       └── transcription.py  # cliente Whisper
 │   ├── tests/
@@ -218,13 +238,17 @@ durante la demo.
 
 ## Próximos pasos
 
-1. Dar de alta las 3 plantillas en Meta y poner sus nombres en Railway
+1. Probar con un teléfono real el botón de ubicación: si el trabajador puede
+   mover el pin o elegir un lugar, y si eso se distingue en el payload
+   (`location.name`/`address`). Fijar la ubicación de cada obra en Equipo.
+2. Dar de alta las 3 plantillas en Meta y poner sus nombres en Railway
    (`docs/plantillas_whatsapp.md`); teléfono del dueño con
    `seed_user.py --phone`.
-2. Aprobar/regresar tareas desde el WhatsApp del dueño (botones en el resumen).
-3. Foto o ubicación cuentan como check-in (evidencia de presencia).
-4. Exportar asistencia del mes por trabajador (Excel/PDF para nómina).
-5. Alembic (convertir `app/migrations.py` en la primera revisión).
+3. Aprobar/regresar tareas desde el WhatsApp del dueño (botones en el resumen).
+4. Presencia, capas siguientes: patrón de "sin ubicación" en la ficha (X de
+   20 días), el encargado confirma su lista, ubicación a hora aleatoria.
+5. Exportar asistencia del mes por trabajador (Excel/PDF para nómina).
+6. Alembic (convertir `app/migrations.py` en la primera revisión).
 
 Infra pendiente: `WHATSAPP_APP_SECRET` en Railway (sin él el webhook acepta
 POSTs sin firma y lo avisa en logs) y evitar que Supabase pause el proyecto

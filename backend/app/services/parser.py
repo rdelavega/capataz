@@ -9,14 +9,17 @@ from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 
+from app import geo
 from app.config import settings
 from app.db import AsyncSessionLocal
 from app.models.attendance import AttendanceDaily
+from app.models.branch import Branch
+from app.models.crew import Crew
 from app.models.event import Event
 from app.models.job import Job
 from app.models.worker import Worker
 from app.phone import phone_variants
-from app.services import storage, transcription, whatsapp
+from app.services import photos, storage, transcription, whatsapp
 from app.timeutil import greeting, is_late, local_today
 
 logger = logging.getLogger(__name__)
@@ -45,6 +48,13 @@ PHOTO_CHOICE = "foto"
 # Una foto que llega dentro de esta ventana después de "Terminé" es la evidencia de esa tarea.
 REVIEW_PHOTO_WINDOW = timedelta(hours=6)
 OPEN_STATUSES = ("pendiente", "en_progreso", "atrasado")
+
+LOCATION_ASK = "Toca *Enviar ubicación* para confirmar que estás en la obra."
+# Se dice una sola vez por trabajador: para qué se usa su ubicación y para qué no.
+LOCATION_NOTICE = (
+    "_Tu ubicación solo se usa para confirmar tu llegada a la obra. "
+    "No te seguimos durante el día._"
+)
 
 
 def _is_checkin(text: str) -> bool:
@@ -87,6 +97,38 @@ def _ack_reply(event_type: str, nombre: str, has_checkin: bool) -> str | None:
     if reply and not has_checkin:
         reply += " Si ya llegaste, manda *presente*."
     return reply
+
+
+def _location_reply(check: geo.LocationCheck) -> str:
+    if check.status == "en_sitio":
+        return f"📍 Listo, quedaste registrado en *{check.branch_name}*."
+    if check.status == "lejos":
+        return (
+            f"📍 Recibida. Te marca a {geo.fmt_distance(check.distance_m)} de *{check.branch_name}*. "
+            "Si te mandaron a otro lado, avísale a tu jefe."
+        )
+    return "📍 Ubicación recibida, gracias."
+
+
+async def _check_location(session, company_id: uuid.UUID, worker: Worker,
+                          lat: float, lng: float) -> geo.LocationCheck:
+    """Compara con las obras de la empresa. La obra esperada es la de su cuadrilla, o la suya."""
+    branches = (await session.execute(
+        select(Branch).where(Branch.company_id == company_id)
+    )).scalars().all()
+    expected = worker.branch_id
+    if worker.crew_id:
+        crew = (await session.execute(select(Crew).where(Crew.id == worker.crew_id))).scalar_one_or_none()
+        if crew and crew.branch_id:
+            expected = crew.branch_id
+    return geo.check_location(lat, lng, branches, expected)
+
+
+def _apply_location(attendance: AttendanceDaily, check: geo.LocationCheck, now: datetime) -> None:
+    attendance.location_status = check.status
+    attendance.location_distance_m = check.distance_m
+    attendance.location_branch_id = check.branch_id
+    attendance.location_at = now
 
 
 async def _safe_send(event_id: uuid.UUID, phone_number: str, body: str) -> None:
@@ -281,11 +323,15 @@ async def _process(event_id: uuid.UUID, session) -> None:
         media_id = msg.get("image", {}).get("id")
         if media_id:
             try:
-                media_bytes = await whatsapp.download_media(media_id)
+                image_bytes = await whatsapp.download_media(media_id)
                 key = f"media/{company_id}/{event_id}.jpg"
-                media_url = storage.upload_to_r2(media_bytes, key, "image/jpeg")
+                media_url = storage.upload_to_r2(image_bytes, key, "image/jpeg")
             except Exception as e:
+                image_bytes = None
                 logger.error("event %s: failed to download/upload image: %s", event_id, e)
+            if image_bytes and (h := photos.photo_hash(image_bytes)):
+                event.photo_hash = h
+                event.duplicate_of_id = await photos.find_duplicate(session, company_id, event_id, h, now)
 
     elif msg_type == "audio":
         event_type = "audio"
@@ -354,10 +400,12 @@ async def _process(event_id: uuid.UUID, session) -> None:
     )
     attendance = existing.scalar_one_or_none()
 
-    if event_type == "checkin":
-        # Check-in → upsert en attendance_daily + respuesta al trabajador
+    location_prompt: str | None = None
+    if event_type in ("checkin", "location") and (event_type == "checkin" or latitude is not None):
+        # Check-in (o ubicación, que también cuenta como llegada) → upsert en attendance_daily
         status = "tarde" if is_late(now) else "presente"
-        if attendance is None:
+        is_new = attendance is None
+        if is_new:
             attendance = AttendanceDaily(
                 company_id=company_id,
                 worker_id=worker.id,
@@ -367,12 +415,31 @@ async def _process(event_id: uuid.UUID, session) -> None:
                 event_id=event.id,
             )
             session.add(attendance)
-            reply = f"✅ ¡Presente! {greeting()}, {nombre}. Tu registro quedó guardado."
         else:
             if attendance.status == "ausente":
                 attendance.status = status
             attendance.checkin_at = attendance.checkin_at or now
-            reply = f"👍 Ya tenías registro de hoy, {nombre}. ¡Que te vaya bien!"
+
+        if event_type == "location":
+            check = await _check_location(session, company_id, worker, latitude, longitude)
+            # Una ubicación "en obra" no se sobreescribe; una lejana sí (fue por material y llegó).
+            if attendance.location_status != "en_sitio":
+                _apply_location(attendance, check, now)
+                reply = _location_reply(check)
+            else:
+                reply = f"📍 Ubicación recibida, {nombre}. Gracias."
+            if is_new:
+                reply = f"✅ ¡Presente! {greeting()}, {nombre}. {reply}"
+        else:
+            reply = (
+                f"✅ ¡Presente! {greeting()}, {nombre}. Tu registro quedó guardado."
+                if is_new else f"👍 Ya tenías registro de hoy, {nombre}. ¡Que te vaya bien!"
+            )
+            if settings.checkin_ask_location and attendance.location_status != "en_sitio":
+                location_prompt = f"{reply}\n\n{LOCATION_ASK}"
+                if worker.location_notice_at is None:
+                    location_prompt += f"\n\n{LOCATION_NOTICE}"
+                    worker.location_notice_at = now
 
     elif marked_absent:
         if attendance is None:
@@ -408,6 +475,12 @@ async def _process(event_id: uuid.UUID, session) -> None:
             await _ask_which_job(phone_number, event_id, ask_choices)
         except Exception as e:
             logger.error("event %s: failed to ask which job: %s", event_id, e)
+    if location_prompt:
+        try:
+            await whatsapp.send_location_request(phone_number, location_prompt)
+            reply = None
+        except Exception as e:
+            logger.error("event %s: failed to ask for location: %s", event_id, e)
     if reply:
         await _safe_send(event_id, phone_number, reply)
     logger.info("event %s: processed as %s for worker %s", event_id, event_type, worker.name)

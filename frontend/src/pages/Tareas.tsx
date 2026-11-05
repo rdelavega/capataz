@@ -5,7 +5,7 @@ import { approveJob, deleteJob, fetchJobs, rejectJob, remindJob, updateJob } fro
 import { NewJobModal } from '../components/NewJobModal'
 import { PhotoLightbox, PhotoThumb, type LightboxEntry } from '../components/PhotoLightbox'
 import { useWorkerDrawer } from '../components/WorkerDrawer'
-import { fmtCuando, fmtDia, fmtHora, firstName, initials, parseDay, plural, waLink } from '../lib/format'
+import { compareWith, fmtCuando, fmtDia, fmtHora, firstName, initials, parseDay, plural, waLink } from '../lib/format'
 
 type Column = 'atrasadas' | 'por_revisar' | 'en_curso' | 'terminadas'
 
@@ -277,7 +277,8 @@ function JobCard({ job: j, column, onChanged, onPhoto }: {
               key={p.id}
               url={p.url}
               label={shown.length > 1 ? `${i === 0 ? 'Antes' : 'Después'} · ${fmtDia(p.received_at)}` : fmtCuando(p.received_at)}
-              onOpen={() => onPhoto({ url: p.url, title: j.title, subtitle: `${j.assignee} · ${fmtCuando(p.received_at)}` })}
+              duplicate={!!p.duplicate_of}
+              onOpen={() => onPhoto({ url: p.url, title: j.title, subtitle: `${j.assignee} · ${fmtCuando(p.received_at)}`, compare: compareWith(p.duplicate_of) })}
             />
           ))}
         </div>

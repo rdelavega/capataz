@@ -25,6 +25,9 @@ class Event(Base):
     transcription: Mapped[str | None] = mapped_column(Text)
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)
+    # Huella perceptual (dHash) de las fotos, para detectar fotos repetidas.
+    photo_hash: Mapped[str | None] = mapped_column(String)
+    duplicate_of_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("events.id", ondelete="SET NULL"))
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     worker: Mapped["Worker | None"] = relationship(back_populates="events")  # noqa: F821
